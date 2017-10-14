@@ -23,6 +23,7 @@ phoneToIndex = dict()
 indexToPhone = []
 
 numOfPhones = 39
+n_input = 3
 
 counter = 0
 for trans in map1_table.values:
@@ -64,7 +65,7 @@ for frame in train_with_label.values:
             files.append(group)
             labels.append(label)
 
-        group = np.zeros([2, numOfFeatures]).tolist()
+        group = np.zeros([n_input - 1, numOfFeatures]).tolist()
         label = []
     
     frame.pop(0)
@@ -102,7 +103,6 @@ def build_dataset(words):
 # Parameters
 learning_rate = 0.001
 training_iters = 10
-n_input = 3
 
 # number of units in RNN cell
 n_hidden = 512
@@ -122,11 +122,11 @@ biases = {
 def RNN(x, weights, biases):
 
     # reshape to [1, n_input]
-    x = tf.reshape(x, [-1, n_input])
+    x = tf.reshape(x, [-1, n_input * numOfFeatures])
 
     # Generate a n_input-element sequence of inputs
     # (eg. [had] [a] [general] -> [20] [6] [33])
-    x = tf.split(x,n_input,1)
+    x = tf.split(x,n_input * numOfFeatures,1)
 
     # 2-layer LSTM, each layer has n_hidden units.
     # Average Accuracy= 95.20% at 50k iter
@@ -178,14 +178,14 @@ with tf.Session() as session:
             group = files[index]
             
             fbanks = []
-            label = np.zeros([len(group), numOfPhones], dtype=float)
-            for offset in range(0, len(group) - 2):
+            label = np.zeros([len(group) - n_input + 1, numOfPhones], dtype=float)
+            for offset in range(0, len(group) - n_input + 1):
                 fbank = [ group[i]  for i in range(offset, offset + n_input) ]
                 fbanks.append(fbank)
                 label[offset][labels[index][offset]] = 1
         
-            fbanks = np.reshape(np.array(fbanks), [-1, n_input, numOfFeatures])
-            label = np.reshape(label, [len(group), -1])
+            #fbanks = np.reshape(np.array(fbanks), [-1, n_input, numOfFeatures])
+            #label = np.reshape(label, [len(group), -1])
             
 
             _, acc, loss, onehot_pred = session.run([optimizer, accuracy, cost, pred], \
