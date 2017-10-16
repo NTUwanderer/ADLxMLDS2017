@@ -71,13 +71,14 @@ labels = []
 def remainSize(num_steps, size):
     return size - size % num_steps
 
+total_length = 0
 for frame in train_with_label.values:
     frame = frame.tolist()
     if frame[0].endswith(suffix):
         if len(group) > 0:
-            rSize = remainSize(num_steps, len(group))
-            files.append(group[:rSize])
-            labels.append(label[:rSize])
+            total_length += len(group) - num_steps + 1
+            files.append(group)
+            labels.append(label)
 
         group = []
         label = []
@@ -171,18 +172,23 @@ with tf.Session() as session:
         sequence = list(range(numOfFiles))
         shuffle(sequence)
 
-        shuffledFiles = files[sequence]
-        shuffledLabels = labels[sequence]
-        shuffledFiles = np.concatenate((shuffledFiles), axis = 0)
-        shuffledLabels = np.concatenate((shuffledLabels), axis = 0)
+        shuffledFiles = np.zeros([total_length, num_steps, numOfFeatures])
+        shuffledLabels = np.zeros([total_length, num_steps])
+        counter = 0
+        for i in sequence:
+            group = files[i]
+            label = labels[i]
+            for i in range(len(group) - num_steps + 1):
+                shuffledFiles[counter] = group[i:i+num_steps]
+                shuffledLabels[counter] = label[i:i+num_steps]
+                counter += 1
+                
+        shuffledFiles = shuffledFiles[1:]
+        shuffledLabels = shuffledLabels[1:]
 
-        
-        size = shuffledLabels.shape[0]
-        shuffledFiles = np.reshape(shuffledFiles, [int(size/num_steps), num_steps, numOfFeatures])
-        shuffledLabels = np.reshape(shuffledLabels, [int(size/num_steps), num_steps])
-        
-        #shuffledFiles.resize((int(size/num_steps), num_steps, numOfFeatures))
-        #shuffledLabels.resize((int(size/num_steps), num_steps))
+        print('shuffledFiles.shape', shuffledFiles.shape)
+        print('shuffledLabels.shape', shuffledLabels.shape)
+
         tempBatchSize = 32
 
         count = 0
@@ -210,10 +216,6 @@ with tf.Session() as session:
         step += 1
     print("Optimization Finished!")
     print("Elapsed time: ", elapsed(time.time() - start_time))
-    print("Run on command line.")
-    print("\ttensorboard --logdir=%s" % (logs_path))
-    print("Point your web browser to: http://localhost:6006/")
     
     saver.save(session, model_path)
-
 
