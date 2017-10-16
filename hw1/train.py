@@ -23,7 +23,6 @@ phoneToIndex = dict()
 indexToPhone = []
 
 numOfPhones = 39
-n_input = 3
 
 counter = 0
 for trans in map1_table.values:
@@ -34,12 +33,6 @@ for trans in map1_table.values:
         counter += 1
 
 numOfFeatures = 69
-
-train_dtype = {'frame': np.string_}
-for i in range(numOfFeatures):
-    train_dtype[i] = np.float64
-
-label_dtype = {'frame': np.string_, 'label': np.string_}
 
 train_col = list(range(numOfFeatures))
 train_col.insert(0, 'frame')
@@ -53,19 +46,24 @@ del train
 del label
 
 suffix="_1"
+num_steps = 10
 
 files = []
 group = []
 labels = []
 
+def remainSize(num_steps, size):
+    return size - size % num_steps
+
 for frame in train_with_label.values:
     frame = frame.tolist()
     if frame[0].endswith(suffix):
         if len(group) > 0:
-            files.append(group)
-            labels.append(label)
+            rSize = remainSize(num_steps, len(group))
+            files.append(group[:rSize])
+            labels.append(label[:rSize])
 
-        group = np.zeros([n_input - 1, numOfFeatures]).tolist()
+        group = []
         label = []
     
     frame.pop(0)
@@ -74,6 +72,9 @@ for frame in train_with_label.values:
 
 del group
 del label
+
+files = np.array(files)
+labels = np.array(labels)
 
 numOfFiles = len(files)
 
@@ -105,53 +106,34 @@ learning_rate = 0.001
 training_iters = 10
 
 # number of units in RNN cell
-n_hidden = 512
-
+n_hidden = numOfPhones
+batch_size = None
 # tf Graph input
-x = tf.placeholder("float", [None, n_input, numOfFeatures])
-y = tf.placeholder("float", [None, numOfPhones])
+x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
+y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
+#init_state = tf.zeros([batch_size, n_hidden])
+with tf.variable_scope('softmax'):
+    W = tf.get_variable('W', [n_hidden, numOfPhones])
+    b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
-# RNN output node weights and biases
-weights = {
-    'out': tf.Variable(tf.random_normal([n_hidden, numOfPhones]))
-}
-biases = {
-    'out': tf.Variable(tf.random_normal([numOfPhones]))
-}
+cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
-def RNN(x, weights, biases):
+logits = tf.reshape(
+            tf.matmul(tf.reshape(rnn_outputs, [-1, n_hidden]), W) + b,
+            [-1, num_steps, numOfPhones])
+#[-1, num_steps, numOfPhones])
 
-    # reshape to [1, n_input]
-    x = tf.reshape(x, [-1, n_input * numOfFeatures])
+pred = tf.nn.softmax(logits)
 
-    # Generate a n_input-element sequence of inputs
-    # (eg. [had] [a] [general] -> [20] [6] [33])
-    x = tf.split(x,n_input * numOfFeatures,1)
+trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 
-    # 2-layer LSTM, each layer has n_hidden units.
-    # Average Accuracy= 95.20% at 50k iter
-    rnn_cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
-
-    # 1-layer LSTM with n_hidden units but with lower accuracy.
-    # Average Accuracy= 90.60% 50k iter
-    # Uncomment line below to test but comment out the 2-layer rnn.MultiRNNCell above
-    # rnn_cell = rnn.BasicLSTMCell(n_hidden)
-
-    # generate prediction
-    outputs, states = rnn.static_rnn(rnn_cell, x, dtype=tf.float32)
-
-    # there are n_input outputs but
-    # we only want the last output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
-
-pred = RNN(x, weights, biases)
-
-# Loss and optimizer
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
-optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
+#optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Model evaluation
-correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
+correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(trueLabel,1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Initializing the variables
@@ -162,7 +144,6 @@ saver = tf.train.Saver()
 with tf.Session() as session:
     session.run(init)
     step = 0
-    end_offset = n_input + 1
     acc_total = 0
     loss_total = 0
 
@@ -174,28 +155,40 @@ with tf.Session() as session:
         sequence = list(range(numOfFiles))
         shuffle(sequence)
 
-        for index in sequence:
-            group = files[index]
-            
-            fbanks = []
-            label = np.zeros([len(group) - n_input + 1, numOfPhones], dtype=float)
-            for offset in range(0, len(group) - n_input + 1):
-                fbank = [ group[i]  for i in range(offset, offset + n_input) ]
-                fbanks.append(fbank)
-                label[offset][labels[index][offset]] = 1
-        
-            #fbanks = np.reshape(np.array(fbanks), [-1, n_input, numOfFeatures])
-            #label = np.reshape(label, [len(group), -1])
-            
+        shuffledFiles = files[sequence]
+        shuffledLabels = labels[sequence]
+        shuffledFiles = np.concatenate((shuffledFiles), axis = 0)
+        shuffledLabels = np.concatenate((shuffledLabels), axis = 0)
 
-            _, acc, loss, onehot_pred = session.run([optimizer, accuracy, cost, pred], \
+        
+        size = shuffledLabels.shape[0]
+        shuffledFiles = np.reshape(shuffledFiles, [int(size/num_steps), num_steps, numOfFeatures])
+        shuffledLabels = np.reshape(shuffledLabels, [int(size/num_steps), num_steps])
+        
+        #shuffledFiles.resize((int(size/num_steps), num_steps, numOfFeatures))
+        #shuffledLabels.resize((int(size/num_steps), num_steps))
+        tempBatchSize = 32
+
+        count = 0
+
+        rnd = int(shuffledFiles.shape[0] / tempBatchSize)
+        while (count+1) <= rnd:
+            fbanks = shuffledFiles[count * tempBatchSize:(count+1) * tempBatchSize]
+            label = shuffledLabels[count * tempBatchSize:(count+1) * tempBatchSize]
+
+            count += 1
+
+            _, acc, loss, onehot_pred = session.run([optimizer, accuracy, cost, logits], \
                                                 feed_dict={x: fbanks, y: label})
             loss_total += loss
             acc_total += acc
 
-        print("Iter= " + str(step+1) + ", Average Loss= " + \
-             "{:.6f}".format(loss_total/numOfFiles) + ", Average Accuracy= " + \
-             "{:.2f}%".format(100*acc_total/numOfFiles))
+            print("Iter= " + str(step) + ", round= " + str(count) + "/" + str(rnd) + ", Average Loss= " + \
+                 "{:.6f}".format(loss_total/(count+1)) + ", Average Accuracy= " + \
+                 "{:.2f}%".format(100*acc_total/(count+1)) + ", Loss= " + \
+                 "{:.6f}".format(loss) + ", Accuracy= " + \
+                 "{:.2f}%".format(100*acc))
+
         acc_total = 0
         loss_total = 0
         step += 1
@@ -205,6 +198,6 @@ with tf.Session() as session:
     print("\ttensorboard --logdir=%s" % (logs_path))
     print("Point your web browser to: http://localhost:6006/")
     
-    saver.save(session, "tmp/model.ckpt")
+    saver.save(session, "tmp/model2.ckpt")
 
 
