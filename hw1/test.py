@@ -1,4 +1,15 @@
 import random, collections, time, argparse
+
+numOfPhones = 39
+
+parser = argparse.ArgumentParser()
+# parser.add_argument("data_path", help="path to directory data")
+parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
+parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
+parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="read model from path")
+parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
+parser.add_argument('-o', '--output_path', default="./output/output.ckpt", help="output csv path")
+
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -7,12 +18,13 @@ from tensorflow.contrib import rnn
 from random import shuffle
 
 data_path = "./data/"
-output_file = "./output/output2.csv"
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument("data_path", help="path to directory data")
-# args = parser.parse_args()
-# data_path = args.data_path
+args = parser.parse_args()
+feature = args.feature
+num_steps = args.num_steps
+model_path = args.model_path
+n_hidden = args.n_hidden
+output_path = args.output_path
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
 map2_table = pd.read_table(data_path + "/48phone_char.map", sep="\t", header = None)
@@ -20,8 +32,6 @@ map2_table = pd.read_table(data_path + "/48phone_char.map", sep="\t", header = N
 map1 = dict()
 phoneToIndex = dict()
 indexToPhone = []
-
-numOfPhones = 39
 
 counter = 0
 for trans in map1_table.values:
@@ -35,7 +45,12 @@ map2 = dict()
 for trans in map2_table.values:
     map2[trans[0]] = trans[2]
 
-numOfFeatures = 69
+if feature == 'fbank':
+    numOfFeatures = 69
+    test_path = '/fbank/test.ark'
+else:
+    numOfFeatures = 39
+    test_path = '/mfcc/test.ark'
 
 train_dtype = {'frame': np.string_}
 for i in range(numOfFeatures):
@@ -44,7 +59,7 @@ for i in range(numOfFeatures):
 test_col = list(range(numOfFeatures))
 test_col.insert(0, 'frame')
 
-test = pd.read_table(data_path + "/fbank/test.ark", sep=" ", header = None, names = test_col)
+test = pd.read_table(data_path + test_path, sep=" ", header = None, names = test_col)
 
 suffix="_1"
 
@@ -81,7 +96,6 @@ files = np.array(files)
 tf.reset_default_graph()
 
 learning_rate = 0.001
-n_hidden = numOfPhones
 batch_size = None
 x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
 y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
@@ -90,7 +104,8 @@ with tf.variable_scope('softmax'):
     W = tf.get_variable('W', [n_hidden, numOfPhones])
     b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
-cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+#cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
@@ -109,7 +124,7 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 saver = tf.train.Saver()
 
-def myTrim(onehot_pred_index, threshold = 4):
+def myTrim(onehot_pred_index, threshold = 2):
     trimmed_pred_index = []
     sil = 7
     current = 7
@@ -138,7 +153,7 @@ def myTrim(onehot_pred_index, threshold = 4):
 outputCSV = pd.DataFrame(columns=['id','phone_sequence'])
 
 with tf.Session() as session:
-    saver.restore(session, 'tmp/model2.ckpt')
+    saver.restore(session, model_path)
 
     for i in range(len(files)):
         print(str(i) + "/" + str(len(files)))
@@ -157,5 +172,5 @@ with tf.Session() as session:
 
         outputCSV.loc[i] = [frameIds[i], phone_pred]
 
-outputCSV.to_csv(path_or_buf=output_file, index=False)
+outputCSV.to_csv(path_or_buf=output_path, index=False)
 

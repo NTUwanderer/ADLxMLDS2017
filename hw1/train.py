@@ -1,6 +1,16 @@
 from __future__ import print_function
 
 import random, collections, time, argparse
+
+numOfPhones = 39
+
+parser = argparse.ArgumentParser()
+# parser.add_argument("data_path", help="path to directory data")
+parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
+parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
+parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
+parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
+
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -11,10 +21,13 @@ from random import shuffle
 random.seed(1)
 
 data_path = "./data/"
-# parser = argparse.ArgumentParser()
-# parser.add_argument("data_path", help="path to directory data")
-# args = parser.parse_args()
-# data_path = args.data_path
+
+
+args = parser.parse_args()
+feature = args.feature
+num_steps = args.num_steps
+model_path = args.model_path
+n_hidden = args.n_hidden
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
 
@@ -22,7 +35,6 @@ map1 = dict()
 phoneToIndex = dict()
 indexToPhone = []
 
-numOfPhones = 39
 
 counter = 0
 for trans in map1_table.values:
@@ -32,13 +44,18 @@ for trans in map1_table.values:
         indexToPhone.append(trans[1])
         counter += 1
 
-numOfFeatures = 69
+if feature == 'fbank':
+    numOfFeatures = 69
+    train_path = '/fbank/train.ark'
+else:
+    numOfFeatures = 39
+    train_path = '/mfcc/train.ark'
 
 train_col = list(range(numOfFeatures))
 train_col.insert(0, 'frame')
 label_col = ['frame', 'label']
 
-train = pd.read_table(data_path + "/fbank/train.ark", sep=" ", header = None, names = train_col)
+train = pd.read_table(data_path + train_path, sep=" ", header = None, names = train_col)
 label = pd.read_table(data_path + "/label/train.lab", sep=",", header = None, names = label_col)
 
 train_with_label = train.join(label.set_index('frame'), on='frame')
@@ -46,7 +63,6 @@ del train
 del label
 
 suffix="_1"
-num_steps = 10
 
 files = []
 group = []
@@ -106,7 +122,6 @@ learning_rate = 0.001
 training_iters = 10
 
 # number of units in RNN cell
-n_hidden = numOfPhones
 batch_size = None
 # tf Graph input
 x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
@@ -116,7 +131,8 @@ with tf.variable_scope('softmax'):
     W = tf.get_variable('W', [n_hidden, numOfPhones])
     b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
-cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+#cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
@@ -198,6 +214,6 @@ with tf.Session() as session:
     print("\ttensorboard --logdir=%s" % (logs_path))
     print("Point your web browser to: http://localhost:6006/")
     
-    saver.save(session, "tmp/model2.ckpt")
+    saver.save(session, model_path)
 
 
