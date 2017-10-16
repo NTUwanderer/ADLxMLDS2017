@@ -7,7 +7,7 @@ from tensorflow.contrib import rnn
 from random import shuffle
 
 data_path = "./data/"
-output_file = "./output/myFirstOutput"
+output_file = "./output/output2.csv"
 
 # parser = argparse.ArgumentParser()
 # parser.add_argument("data_path", help="path to directory data")
@@ -22,7 +22,6 @@ phoneToIndex = dict()
 indexToPhone = []
 
 numOfPhones = 39
-n_input = 3
 
 counter = 0
 for trans in map1_table.values:
@@ -52,69 +51,60 @@ suffix="_1"
 files = []
 group = []
 frameIds = []
+num_steps=10
+
+def remainSize(num_steps, size):
+    return size - size % num_steps
 
 for frame in test.values:
     frame = frame.tolist()
     if frame[0].endswith(suffix):
         if len(group) > 0:
-            files.append(group)
-            frameIds.append(frame[0][:-2])
+            rSize = remainSize(num_steps, len(group))
+            files.append(group[:rSize])
 
-        group = np.zeros([n_input - 1, numOfFeatures]).tolist()
-        label = []
+        frameIds.append(frame[0][:-2])
+
+        group = []
     
     frame.pop(0)
     group.append(frame)
 
+if len(group) > 0:
+    rSize = remainSize(num_steps, len(group))
+    files.append(group[:rSize])
+
 del group
+
+files = np.array(files)
 
 tf.reset_default_graph()
 
 learning_rate = 0.001
-n_hidden = 512
-x = tf.placeholder("float", [None, n_input, numOfFeatures])
-y = tf.placeholder("float", [None, numOfPhones])
+n_hidden = numOfPhones
+batch_size = None
+x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
+y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
+#init_state = tf.zeros([batch_size, n_hidden])
+with tf.variable_scope('softmax'):
+    W = tf.get_variable('W', [n_hidden, numOfPhones])
+    b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
-# RNN output node weights and biases
-weights = {
-    'out': tf.Variable(tf.random_normal([n_hidden, numOfPhones]))
-}
-biases = {
-    'out': tf.Variable(tf.random_normal([numOfPhones]))
-}
+cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
-def RNN(x, weights, biases):
+logits = tf.reshape(
+            tf.matmul(tf.reshape(rnn_outputs, [-1, n_hidden]), W) + b,
+            [-1, num_steps, numOfPhones])
+#[-1, num_steps, numOfPhones])
 
-    # reshape to [1, n_input]
-    x = tf.reshape(x, [-1, n_input * numOfFeatures])
+pred = tf.nn.softmax(logits)
 
-    # Generate a n_input-element sequence of inputs
-    # (eg. [had] [a] [general] -> [20] [6] [33])
-    x = tf.split(x,n_input * numOfFeatures,1)
+trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 
-    # 2-layer LSTM, each layer has n_hidden units.
-    # Average Accuracy= 95.20% at 50k iter
-    rnn_cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
-
-    # 1-layer LSTM with n_hidden units but with lower accuracy.
-    # Average Accuracy= 90.60% 50k iter
-    # Uncomment line below to test but comment out the 2-layer rnn.MultiRNNCell above
-    # rnn_cell = rnn.BasicLSTMCell(n_hidden)
-
-    # generate prediction
-    outputs, states = rnn.static_rnn(rnn_cell, x, dtype=tf.float32)
-
-    # there are n_input outputs but
-    # we only want the last output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
-
-pred = RNN(x, weights, biases)
-# Loss and optimizer
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
-optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
-
-# Model evaluation
-correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
+correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(trueLabel,1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 saver = tf.train.Saver()
@@ -148,17 +138,17 @@ def myTrim(onehot_pred_index, threshold = 4):
 outputCSV = pd.DataFrame(columns=['id','phone_sequence'])
 
 with tf.Session() as session:
-    saver.restore(session, 'tmp/model.ckpt')
+    saver.restore(session, 'tmp/model2.ckpt')
 
     for i in range(len(files)):
         print(str(i) + "/" + str(len(files)))
         fbanks = []
-        group = files[i]
-        for offset in range(0, len(group) - n_input + 1):
-            fbank = [ group[i]  for i in range(offset, offset + n_input) ]
-            fbanks.append(fbank)
+        group = np.array(files[i])
+        size = group.shape[0]
+        fbanks = np.reshape(group, [int(size / num_steps), num_steps, numOfFeatures])
     
         onehot_pred = session.run(pred, feed_dict={x: fbanks})
+        onehot_pred = np.reshape(onehot_pred, [-1, numOfPhones])
         onehot_pred_index = tf.argmax(onehot_pred, 1).eval()
 
         trimmed_pred_index = myTrim(onehot_pred_index)
@@ -167,5 +157,5 @@ with tf.Session() as session:
 
         outputCSV.loc[i] = [frameIds[i], phone_pred]
 
-outputCSV.to_csv(path_or_buf=myFirstOutput)
+outputCSV.to_csv(path_or_buf=output_file, index=False)
 
