@@ -169,25 +169,22 @@ with tf.Session() as session:
     step = 0
     while step < training_iters:
         # Generate a minibatch. Add some randomness on selection process.
-        sequence = list(range(numOfFiles))
+        sequence = list(range(total_length))
         shuffle(sequence)
 
         shuffledFiles = np.zeros([total_length, num_steps, numOfFeatures])
         shuffledLabels = np.zeros([total_length, num_steps])
         counter = 0
-        for i in sequence:
-            group = files[i]
-            label = labels[i]
+        for index in range(numOfFiles):
+            group = files[index]
+            label = labels[index]
             for i in range(len(group) - num_steps + 1):
                 shuffledFiles[counter] = group[i:i+num_steps]
                 shuffledLabels[counter] = label[i:i+num_steps]
                 counter += 1
                 
-        shuffledFiles = shuffledFiles[1:]
-        shuffledLabels = shuffledLabels[1:]
-
-        print('shuffledFiles.shape', shuffledFiles.shape)
-        print('shuffledLabels.shape', shuffledLabels.shape)
+        shuffledFiles = shuffledFiles[sequence]
+        shuffledLabels = shuffledLabels[sequence]
 
         tempBatchSize = 32
 
