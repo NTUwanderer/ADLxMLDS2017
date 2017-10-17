@@ -7,8 +7,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="read model from path")
-parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
-parser.add_argument('-o', '--output_path', default="./output/output.ckpt", help="output csv path")
+parser.add_argument('-c', '--n_hidden', default=100, type=int, help="n_hidden in LSTM")
+parser.add_argument('-o', '--output_path', default="./output/output.csv", help="output csv path")
 
 import pandas as pd
 import numpy as np
@@ -75,11 +75,9 @@ for frame in test.values:
     frame = frame.tolist()
     if frame[0].endswith(suffix):
         if len(group) > 0:
-            rSize = remainSize(num_steps, len(group))
-            files.append(group[:rSize])
+            files.append(group)
 
         frameIds.append(frame[0][:-2])
-
         group = []
     
     frame.pop(0)
@@ -157,13 +155,14 @@ with tf.Session() as session:
 
     for i in range(len(files)):
         print(str(i) + "/" + str(len(files)))
-        fbanks = []
         group = np.array(files[i])
-        size = group.shape[0]
-        fbanks = np.reshape(group, [int(size / num_steps), num_steps, numOfFeatures])
-    
+        fbanks = np.zeros([len(group) - num_steps + 1, num_steps, numOfFeatures])
+        for j in range(len(group) - num_steps + 1):
+            fbanks[j] = np.array(group[j:j+num_steps])
+
         onehot_pred = session.run(pred, feed_dict={x: fbanks})
-        onehot_pred = np.reshape(onehot_pred, [-1, numOfPhones])
+        myPred = onehot_pred[:,-1]
+        onehot_pred = np.reshape(myPred, [-1, numOfPhones])
         onehot_pred_index = tf.argmax(onehot_pred, 1).eval()
 
         trimmed_pred_index = myTrim(onehot_pred_index)
