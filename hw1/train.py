@@ -133,7 +133,7 @@ with tf.variable_scope('softmax'):
     b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
 #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
-cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
+cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden),rnn.GRUCell(n_hidden)])
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
