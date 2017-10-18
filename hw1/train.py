@@ -31,6 +31,9 @@ model_path = args.model_path
 n_hidden = args.n_hidden
 rnn_cell = args.rnn_cell
 
+first_half_num = int(num_steps / 2)
+second_half_num = num_steps - first_half_num
+
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
 
 map1 = dict()
@@ -109,8 +112,6 @@ def elapsed(sec):
 
 # Target log path
 logs_path = './'
-writer = tf.summary.FileWriter(logs_path)
-
 
 def build_dataset(words):
     count = collections.Counter(words).most_common()
@@ -150,11 +151,11 @@ logits = tf.reshape(
 #[-1, num_steps, numOfPhones])
 
 pred = tf.nn.softmax(logits)
-pred1, pred2 = tf.split(pred, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+pred1, pred2 = tf.split(pred, [first_half_num, second_half_num], 1)
 
 trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-logits1, logits2 = tf.split(logits, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
-trueLabel1, trueLabel2 = tf.split(trueLabel, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+logits1, logits2 = tf.split(logits, [first_half_num, second_half_num], 1)
+trueLabel1, trueLabel2 = tf.split(trueLabel, [first_half_num, second_half_num], 1)
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
 optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 
@@ -176,8 +177,6 @@ with tf.Session() as session:
     acc_total = 0
     loss_total = 0
 
-    writer.add_graph(session.graph)
-    
     step = 0
     while step < training_iters:
         # Generate a minibatch. Add some randomness on selection process.
