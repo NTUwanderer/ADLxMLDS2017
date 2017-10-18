@@ -10,6 +10,7 @@ parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfc
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
 parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
+parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
 
 import pandas as pd
 import numpy as np
@@ -28,6 +29,7 @@ feature = args.feature
 num_steps = args.num_steps
 model_path = args.model_path
 n_hidden = args.n_hidden
+rnn_cell = args.rnn_cell
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
 
@@ -133,7 +135,13 @@ with tf.variable_scope('softmax'):
     b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
 #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
-cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden),rnn.GRUCell(n_hidden)])
+if rnn_cell == 'gru':
+    cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden),rnn.GRUCell(n_hidden)])
+elif rnn_cell == 'lstm':
+    cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True),rnn.LSTMCell(n_hidden, state_is_tuple=True)], state_is_tuple=True)
+else:
+    cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden),rnn.BasicRNNCell(n_hidden)])
+
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
@@ -142,15 +150,19 @@ logits = tf.reshape(
 #[-1, num_steps, numOfPhones])
 
 pred = tf.nn.softmax(logits)
+pred1, pred2 = tf.split(pred, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
 
 trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+logits1, logits2 = tf.split(logits, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+trueLabel1, trueLabel2 = tf.split(trueLabel, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
 optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Model evaluation
-correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(trueLabel,1))
+correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
+print('correct_pred.shape: ', correct_pred.shape)
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Initializing the variables

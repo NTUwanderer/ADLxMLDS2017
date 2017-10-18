@@ -9,6 +9,7 @@ parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_step
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="read model from path")
 parser.add_argument('-c', '--n_hidden', default=100, type=int, help="n_hidden in LSTM")
 parser.add_argument('-o', '--output_path', default="./output/output.csv", help="output csv path")
+parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
 
 import pandas as pd
 import numpy as np
@@ -24,6 +25,7 @@ feature = args.feature
 num_steps = args.num_steps
 model_path = args.model_path
 n_hidden = args.n_hidden
+rnn_cell = args.rnn_cell
 output_path = args.output_path
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
@@ -103,7 +105,13 @@ with tf.variable_scope('softmax'):
     b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
 
 #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
-cell = rnn.MultiRNNCell([rnn.BasicLSTMCell(n_hidden),rnn.BasicLSTMCell(n_hidden)])
+if rnn_cell == 'gru':
+    cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden),rnn.GRUCell(n_hidden)])
+elif rnn_cell == 'lstm':
+    cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True),rnn.LSTMCell(n_hidden, state_is_tuple=True)], state_is_tuple=True)
+else:
+    cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden),rnn.BasicRNNCell(n_hidden)])
+
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
@@ -112,12 +120,18 @@ logits = tf.reshape(
 #[-1, num_steps, numOfPhones])
 
 pred = tf.nn.softmax(logits)
+pred1, pred2 = tf.split(pred, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
 
 trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+logits1, logits2 = tf.split(logits, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+trueLabel1, trueLabel2 = tf.split(trueLabel, [int(num_steps / 2), num_steps - int(num_steps / 2)], 1)
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
 optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 
-correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(trueLabel,1))
+#optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
+
+# Model evaluation
+correct_pred = tf.equal(tf.argmax(pred2,1), tf.argmax(trueLabel2,1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 saver = tf.train.Saver()
@@ -154,7 +168,7 @@ with tf.Session() as session:
     saver.restore(session, model_path)
 
     for i in range(len(files)):
-        print(str(i) + "/" + str(len(files)))
+        print(str(i + 1) + "/" + str(len(files)))
         group = np.array(files[i])
         fbanks = np.zeros([len(group) - num_steps + 1, num_steps, numOfFeatures])
         for j in range(len(group) - num_steps + 1):
