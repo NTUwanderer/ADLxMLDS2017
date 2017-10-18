@@ -71,10 +71,6 @@ suffix="_1"
 files = []
 group = []
 frameIds = []
-num_steps=10
-
-def remainSize(num_steps, size):
-    return size - size % num_steps
 
 for frame in test.values:
     frame = frame.tolist()
@@ -89,8 +85,7 @@ for frame in test.values:
     group.append(frame)
 
 if len(group) > 0:
-    rSize = remainSize(num_steps, len(group))
-    files.append(group[:rSize])
+    files.append(group)
 
 del group
 
@@ -181,15 +176,10 @@ with tf.Session() as session:
 
         size = onehot_pred.shape[0]
         myPred = np.zeros([size + second_half_num + 1, numOfPhones])
-        for i in range(size):
-            for j in range(second_half_num):
-                myPred[i + j] = np.add(myPred[i + j], onehot_pred[i][j])
+        for j in range(size):
+            for k in range(second_half_num):
+                myPred[j + k] = np.add(myPred[j + k], onehot_pred[j][k])
         onehot_pred_index = tf.argmax(myPred, 1).eval()
-
-        print('onehot_pred_index: ', onehot_pred_index)
-
-        import time
-        time.sleep(10)
 
         trimmed_pred_index = myTrim(onehot_pred_index)
     
@@ -198,4 +188,5 @@ with tf.Session() as session:
         outputCSV.loc[i] = [frameIds[i], phone_pred]
 
 outputCSV.to_csv(path_or_buf=output_path, index=False)
+
 
