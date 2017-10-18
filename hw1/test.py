@@ -134,7 +134,7 @@ optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Model evaluation
-correct_pred = tf.equal(tf.argmax(pred2,1), tf.argmax(trueLabel2,1))
+correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 saver = tf.train.Saver()
@@ -185,6 +185,11 @@ with tf.Session() as session:
             for j in range(second_half_num):
                 myPred[i + j] = np.add(myPred[i + j], onehot_pred[i][j])
         onehot_pred_index = tf.argmax(myPred, 1).eval()
+
+        print('onehot_pred_index: ', onehot_pred_index)
+
+        import time
+        time.sleep(10)
 
         trimmed_pred_index = myTrim(onehot_pred_index)
     
