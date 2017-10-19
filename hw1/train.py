@@ -11,6 +11,7 @@ parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_step
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
 parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
 parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
+parser.add_argument('-e', '--epoch', default=10, type=int, help="num of epoch")
 
 import pandas as pd
 import numpy as np
@@ -30,6 +31,7 @@ num_steps = args.num_steps
 model_path = args.model_path
 n_hidden = args.n_hidden
 rnn_cell = args.rnn_cell
+epoch = args.epoch
 
 first_half_num = int(num_steps / 2)
 second_half_num = num_steps - first_half_num
@@ -123,7 +125,6 @@ def build_dataset(words):
 
 # Parameters
 learning_rate = 0.001
-training_iters = 10
 
 # number of units in RNN cell
 batch_size = None
@@ -178,7 +179,7 @@ with tf.Session() as session:
     loss_total = 0
 
     step = 0
-    while step < training_iters:
+    while step < epoch:
         # Generate a minibatch. Add some randomness on selection process.
         sequence = list(range(total_length))
         shuffle(sequence)
@@ -190,14 +191,12 @@ with tf.Session() as session:
             group = files[index]
             label = labels[index]
             for i in range(len(group) - num_steps + 1):
-                shuffledFiles[counter] = group[i:i+num_steps]
-                shuffledLabels[counter] = label[i:i+num_steps]
+                newIndex = sequence[counter]
+                shuffledFiles[newIndex] = group[i:i+num_steps]
+                shuffledLabels[newIndex] = label[i:i+num_steps]
                 counter += 1
                 
-        shuffledFiles = shuffledFiles[sequence]
-        shuffledLabels = shuffledLabels[sequence]
-
-        tempBatchSize = 32
+        tempBatchSize = 128
 
         count = 0
 

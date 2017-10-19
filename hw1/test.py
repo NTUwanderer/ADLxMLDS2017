@@ -134,7 +134,7 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 saver = tf.train.Saver()
 
-def myTrim(onehot_pred_index, threshold = 2):
+def myTrim(onehot_pred_index, threshold = 3):
     trimmed_pred_index = []
     sil = 7
     current = 7
@@ -147,7 +147,7 @@ def myTrim(onehot_pred_index, threshold = 2):
                 continue
             
             temp_count += 1
-            if temp_count == 4:
+            if temp_count == threshold:
                 trimmed_pred_index.append(temp)
                 current = temp
 
