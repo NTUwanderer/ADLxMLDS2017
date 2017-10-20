@@ -34,6 +34,7 @@ rnn_cell = args.rnn_cell
 epoch = args.epoch
 
 first_half_num = int(num_steps / 2)
+# first_half_num = 0
 second_half_num = num_steps - first_half_num
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
@@ -87,8 +88,12 @@ for frame in train_with_label.values:
             files.append(group)
             labels.append(label)
 
-        group = []
-        label = []
+        frame.pop(0)
+        l = phoneToIndex[map1[frame.pop()]]
+
+        group = [frame] * num_steps
+        label = [l] * num_steps
+        continue
     
     frame.pop(0)
     label.append(phoneToIndex[map1[frame.pop()]])
@@ -124,7 +129,7 @@ def build_dataset(words):
     return dictionary, reverse_dictionary
 
 # Parameters
-learning_rate = 0.001
+learning_rate = 0.0001
 
 # number of units in RNN cell
 batch_size = None
@@ -158,13 +163,12 @@ trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
 logits1, logits2 = tf.split(logits, [first_half_num, second_half_num], 1)
 trueLabel1, trueLabel2 = tf.split(trueLabel, [first_half_num, second_half_num], 1)
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
-optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Model evaluation
 correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
-print('correct_pred.shape: ', correct_pred.shape)
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Initializing the variables

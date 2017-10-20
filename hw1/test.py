@@ -29,6 +29,7 @@ rnn_cell = args.rnn_cell
 output_path = args.output_path
 
 first_half_num = int(num_steps / 2)
+# first_half_num = 0
 second_half_num = num_steps - first_half_num
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
@@ -79,8 +80,10 @@ for frame in test.values:
             files.append(group)
 
         frameIds.append(frame[0][:-2])
-        group = []
-    
+        frame.pop(0)
+        group = [frame] * num_steps
+        continue
+
     frame.pop(0)
     group.append(frame)
 
@@ -124,7 +127,7 @@ trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
 logits1, logits2 = tf.split(logits, [first_half_num, second_half_num], 1)
 trueLabel1, trueLabel2 = tf.split(trueLabel, [first_half_num, second_half_num], 1)
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
-optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(cost)
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
@@ -165,6 +168,7 @@ outputCSV = pd.DataFrame(columns=['id','phone_sequence'])
 with tf.Session() as session:
     saver.restore(session, model_path)
 
+    lenCounter = 0
     for i in range(len(files)):
         print(str(i + 1) + "/" + str(len(files)))
         group = np.array(files[i])
@@ -174,19 +178,22 @@ with tf.Session() as session:
 
         onehot_pred = session.run(pred2, feed_dict={x: fbanks})
 
-        size = onehot_pred.shape[0]
-        myPred = np.zeros([size + second_half_num + 1, numOfPhones])
-        for j in range(size):
-            for k in range(second_half_num):
-                myPred[j + k] = np.add(myPred[j + k], onehot_pred[j][k])
+        myPred = onehot_pred[:,-1]
+        # size = onehot_pred.shape[0]
+        # myPred = np.zeros([size + second_half_num + 1, numOfPhones])
+        # for j in range(size):
+        #     for k in range(second_half_num):
+        #         myPred[j + k] = np.add(myPred[j + k], onehot_pred[j][k])
         onehot_pred_index = tf.argmax(myPred, 1).eval()
 
         trimmed_pred_index = myTrim(onehot_pred_index)
     
         phone_pred = ''.join([ map2[indexToPhone[index]]  for index in trimmed_pred_index ])
 
+        lenCounter += len(phone_pred)
         outputCSV.loc[i] = [frameIds[i], phone_pred]
 
+    print('lenCounter: ', lenCounter, ', average: ', lenCounter / len(files))
 outputCSV.to_csv(path_or_buf=output_path, index=False)
 
 
