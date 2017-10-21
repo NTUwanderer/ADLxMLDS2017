@@ -75,6 +75,8 @@ del label
 suffix="_1"
 
 files = []
+validation_files = []
+validation_labels = []
 group = []
 labels = []
 
@@ -86,9 +88,14 @@ for frame in train_with_label.values:
     frame = frame.tolist()
     if frame[0].endswith(suffix):
         if len(group) > 0:
-            total_length += len(group) - num_steps + 1
-            files.append(group)
-            labels.append(label)
+            if random.randint(0, 10) == 0:
+                validation_files.append(group)
+                label = label[num_steps - 1:]
+                validation_labels.append(label)
+            else:
+                total_length += len(group) - num_steps + 1
+                files.append(group)
+                labels.append(label)
 
         frame.pop(0)
         l = phoneToIndex[map1[frame.pop()]]
@@ -101,6 +108,7 @@ for frame in train_with_label.values:
     label.append(phoneToIndex[map1[frame.pop()]])
     group.append(frame)
 
+del train_with_label
 del group
 del label
 
@@ -173,6 +181,9 @@ optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
+CURSOR_UP_ONE = '\033[F'
+ERASE_LINE = '\033[K'
+
 # Initializing the variables
 init = tf.global_variables_initializer()
 
@@ -218,15 +229,43 @@ with tf.Session() as session:
             loss_total += loss
             acc_total += acc
 
-            print("Iter= " + str(step) + ", round= " + str(count) + "/" + str(rnd) + ", Average Loss= " + \
-                 "{:.6f}".format(loss_total/(count+1)) + ", Average Accuracy= " + \
-                 "{:.2f}%".format(100*acc_total/(count+1)) + ", Loss= " + \
-                 "{:.6f}".format(loss) + ", Accuracy= " + \
-                 "{:.2f}%".format(100*acc))
+            if count != 1:
+                print(CURSOR_UP_ONE + ERASE_LINE + CURSOR_UP_ONE)
+
+            print("Epoch= " + str(step + 1) + "/" + str(epoch) + ", round= " + \
+                str(count) + "/" + str(rnd) + ", Average Loss= " + \
+                "{:.6f}".format(loss_total/(count+1)) + ", Average Accuracy= " + \
+                "{:.2f}%".format(100*acc_total/(count+1)) + ", Loss= " + \
+                "{:.6f}".format(loss) + ", Accuracy= " + \
+                "{:.2f}%".format(100*acc))
 
         acc_total = 0
         loss_total = 0
         step += 1
+
+        correct_count = 0
+        total_label_count = 0
+        for i in range(len(validation_files)):
+            group = np.array(validation_files[i])
+            label = validation_labels[i]
+            total_label_count += len(label)
+
+            fbanks = np.zeros([len(group) - num_steps + 1, num_steps, numOfFeatures])
+            for j in range(len(group) - num_steps + 1):
+                fbanks[j] = np.array(group[j:j+num_steps])
+
+            onehot_pred = session.run(pred2, feed_dict={x: fbanks})
+            myPred = onehot_pred[:,-1]
+            onehot_pred_index = tf.argmax(myPred, 1).eval()
+
+            if len(label) != len(onehot_pred_index):
+                print ('unfit len: ', len(label), len(onehot_pred_index))
+            for i in range(len(label)):
+                if label[i] == onehot_pred_index[i]:
+                    correct_count += 1
+
+        print ('cross_validation accuracy: ', "{:.2f}%".format(100.0 * correct_count / total_label_count))
+
     print("Optimization Finished!")
     print("Elapsed time: ", elapsed(time.time() - start_time))
     

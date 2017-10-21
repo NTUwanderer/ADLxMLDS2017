@@ -92,6 +92,7 @@ for frame in test.values:
 if len(group) > 0:
     files.append(group)
 
+del test
 del group
 
 files = np.array(files)
@@ -137,6 +138,9 @@ optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
+CURSOR_UP_ONE = '\033[F'
+ERASE_LINE = '\033[K'
+
 saver = tf.train.Saver()
 
 def myTrim(onehot_pred_index, threshold = 3):
@@ -152,13 +156,14 @@ def myTrim(onehot_pred_index, threshold = 3):
                 continue
             
             temp_count += 1
-            if temp_count == threshold:
-                trimmed_pred_index.append(temp)
-                current = temp
 
         else:
             temp_count = 1
             temp = index
+
+        if temp_count == threshold:
+            trimmed_pred_index.append(temp)
+            current = temp
 
     if trimmed_pred_index[-1] == sil:
         trimmed_pred_index.pop()
@@ -172,6 +177,8 @@ with tf.Session() as session:
 
     lenCounter = 0
     for i in range(len(files)):
+        if count != 0:
+            print(CURSOR_UP_ONE + ERASE_LINE + CURSOR_UP_ONE)
         print(str(i + 1) + "/" + str(len(files)))
         group = np.array(files[i])
         fbanks = np.zeros([len(group) - num_steps + 1, num_steps, numOfFeatures])
