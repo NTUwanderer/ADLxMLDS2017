@@ -200,7 +200,7 @@ with tf.Session() as session:
         for j in range(len(group) - num_steps + 1):
             fbanks[j] = np.array(group[j:j+num_steps])
 
-        onehot_pred = session.run(pred2, feed_dict={x: fbanks})
+        onehot_pred = session.run(pred, feed_dict={x: fbanks})
 
         myPred = onehot_pred[:,-1]
         # size = onehot_pred.shape[0]
