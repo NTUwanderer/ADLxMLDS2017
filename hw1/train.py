@@ -37,8 +37,8 @@ epoch = args.epoch
 n_layers = args.n_layers
 dropout = args.dropout
 
-# first_half_num = int(num_steps / 2)
-first_half_num = 0
+first_half_num = int(num_steps / 2)
+# first_half_num = 0
 second_half_num = num_steps - first_half_num
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
@@ -156,21 +156,33 @@ with tf.variable_scope('softmax'):
 #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
 if rnn_cell == 'gru':
     cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
+    cell2 = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
 elif rnn_cell == 'lstm':
     cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
+    cell2 = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
 else:
     cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+    cell2 = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
 
 cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
-rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
+cell2 = tf.contrib.rnn.DropoutWrapper(cell2, output_keep_prob=1.0 - dropout)
+rnn_outputs, final_state = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x, dtype=tf.float32)
 
-logits = tf.reshape(
-            tf.matmul(tf.reshape(rnn_outputs, [-1, n_hidden]), W) + b,
+outputs1 = rnn_outputs[0]
+outputs2 = rnn_outputs[1]
+logits1 = tf.reshape(
+            tf.matmul(tf.reshape(outputs1, [-1, n_hidden]), W) + b,
+            [-1, num_steps, numOfPhones])
+
+logits2 = tf.reshape(
+            tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
             [-1, num_steps, numOfPhones])
 #[-1, num_steps, numOfPhones])
+logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
+_2, logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
+logits = tf.concat([logits1, logits2], 1)
 
 pred = tf.nn.softmax(logits)
-pred1, pred2 = tf.split(pred, [first_half_num, second_half_num], 1)
 
 trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
 logits1, logits2 = tf.split(logits, [first_half_num, second_half_num], 1)
@@ -181,7 +193,7 @@ optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Model evaluation
-correct_pred = tf.equal(tf.argmax(pred2,2), tf.argmax(trueLabel2,2))
+correct_pred = tf.equal(tf.argmax(pred,2), tf.argmax(trueLabel,2))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 CURSOR_UP_ONE = '\033[F'
