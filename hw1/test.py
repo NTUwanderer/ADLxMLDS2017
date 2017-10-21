@@ -135,16 +135,14 @@ logits2 = tf.reshape(
             tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
             [-1, num_steps, numOfPhones])
 #[-1, num_steps, numOfPhones])
-logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
-_2, logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
-logits = tf.concat([logits1, logits2], 1)
+half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
+_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
+logits = tf.concat([half_logits1, half_logits2], 1)
 
 pred = tf.nn.softmax(logits)
 
 trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-logits1, logits2 = tf.split(logits, [first_half_num, second_half_num], 1)
-trueLabel1, trueLabel2 = tf.split(trueLabel, [first_half_num, second_half_num], 1)
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits2, labels=trueLabel2))
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
 optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 
 #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
