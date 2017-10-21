@@ -192,7 +192,7 @@ with tf.Session() as session:
 
     lenCounter = 0
     for i in range(len(files)):
-        if count != 0:
+        if i != 0:
             print(CURSOR_UP_ONE + ERASE_LINE + CURSOR_UP_ONE)
         print(str(i + 1) + "/" + str(len(files)))
         group = np.array(files[i])
