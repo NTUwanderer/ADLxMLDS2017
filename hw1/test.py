@@ -11,6 +11,7 @@ parser.add_argument('-c', '--n_hidden', default=100, type=int, help="n_hidden in
 parser.add_argument('-o', '--output_path', default="./output/output.csv", help="output csv path")
 parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
 parser.add_argument('-l', '--n_layers', default=2, type=int, help="num of layers")
+parser.add_argument('-d', '--dropout', default=0.1, type=float, help="um of layers")
 
 import pandas as pd
 import numpy as np
@@ -29,6 +30,7 @@ n_hidden = args.n_hidden
 rnn_cell = args.rnn_cell
 output_path = args.output_path
 n_layers = args.n_layers
+dropout = args.dropout
 
 first_half_num = int(num_steps / 2)
 # first_half_num = 0
@@ -115,6 +117,7 @@ elif rnn_cell == 'lstm':
     cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
 else:
     cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
 
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 

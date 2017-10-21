@@ -13,6 +13,7 @@ parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_h
 parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
 parser.add_argument('-e', '--epoch', default=10, type=int, help="num of epoch")
 parser.add_argument('-l', '--n_layers', default=2, type=int, help="num of layers")
+parser.add_argument('-d', '--dropout', default=0.1, type=float, help="um of layers")
 
 import pandas as pd
 import numpy as np
@@ -34,9 +35,10 @@ n_hidden = args.n_hidden
 rnn_cell = args.rnn_cell
 epoch = args.epoch
 n_layers = args.n_layers
+dropout = args.dropout
 
-first_half_num = int(num_steps / 2)
-# first_half_num = 0
+# first_half_num = int(num_steps / 2)
+first_half_num = 0
 second_half_num = num_steps - first_half_num
 
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
@@ -159,6 +161,7 @@ elif rnn_cell == 'lstm':
 else:
     cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
 
+cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
 rnn_outputs, final_state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
 logits = tf.reshape(
