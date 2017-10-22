@@ -136,9 +136,10 @@ logits2 = tf.reshape(
             tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
             [-1, num_steps, numOfPhones])
 #[-1, num_steps, numOfPhones])
-half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
-_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
-logits = tf.concat([half_logits1, half_logits2], 1)
+#half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
+#_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
+#logits = tf.concat([half_logits1, half_logits2], 1)
+logits = tf.add(logits1, logits2)
 
 pred = tf.nn.softmax(logits)
 
