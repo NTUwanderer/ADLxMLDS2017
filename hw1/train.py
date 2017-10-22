@@ -5,7 +5,7 @@ import random, collections, time, argparse
 numOfPhones = 39
 
 parser = argparse.ArgumentParser()
-# parser.add_argument("data_path", help="path to directory data")
+parser.add_argument("data_path", help="path to directory data")
 parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
@@ -14,6 +14,7 @@ parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm',
 parser.add_argument('-e', '--epoch', default=10, type=int, help="num of epoch")
 parser.add_argument('-l', '--n_layers', default=2, type=int, help="num of layers")
 parser.add_argument('-d', '--dropout', default=0.1, type=float, help="um of layers")
+parser.add_argument('-g', '--gpu', action="store_true", help="Use gpu0 instead of cpu0")
 
 import pandas as pd
 import numpy as np
@@ -24,10 +25,10 @@ from random import shuffle
 
 random.seed(1)
 
-data_path = "./data/"
-
+#data_path = "./data/"
 
 args = parser.parse_args()
+data_path = args.data_path
 feature = args.feature
 num_steps = args.num_steps
 model_path = args.model_path
@@ -36,6 +37,10 @@ rnn_cell = args.rnn_cell
 epoch = args.epoch
 n_layers = args.n_layers
 dropout = args.dropout
+if args.gpu:
+    device_name = "/gpu:0"
+else:
+    device_name = "/cpu:0"
 
 first_half_num = int(num_steps / 2)
 # first_half_num = 0
@@ -145,54 +150,55 @@ def build_dataset(words):
 learning_rate = 0.0001
 
 batch_size = None
-x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
-y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
-#init_state = tf.zeros([batch_size, n_hidden])
-with tf.variable_scope('softmax'):
-    W = tf.get_variable('W', [n_hidden, numOfPhones])
-    b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
-
-#cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
-if rnn_cell == 'gru':
-    cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
-    cell2 = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
-elif rnn_cell == 'lstm':
-    cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
-    cell2 = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
-else:
-    cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
-    cell2 = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
-
-cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
-cell2 = tf.contrib.rnn.DropoutWrapper(cell2, output_keep_prob=1.0 - dropout)
-rnn_outputs, final_state = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x, dtype=tf.float32)
-
-outputs1 = rnn_outputs[0]
-outputs2 = rnn_outputs[1]
-logits1 = tf.reshape(
-            tf.matmul(tf.reshape(outputs1, [-1, n_hidden]), W) + b,
-            [-1, num_steps, numOfPhones])
-
-logits2 = tf.reshape(
-            tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
-            [-1, num_steps, numOfPhones])
-#[-1, num_steps, numOfPhones])
-#half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
-#_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
-#logits = tf.concat([half_logits1, half_logits2], 1)
-logits = tf.add(logits1, logits2)
-
-pred = tf.nn.softmax(logits)
-
-trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
-optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
-
-#optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
-
-# Model evaluation
-correct_pred = tf.equal(tf.argmax(pred,2), tf.argmax(trueLabel,2))
-accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+with tf.device(device_name):
+    x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
+    y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
+    #init_state = tf.zeros([batch_size, n_hidden])
+    with tf.variable_scope('softmax'):
+        W = tf.get_variable('W', [n_hidden, numOfPhones])
+        b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
+    
+    #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+    if rnn_cell == 'gru':
+        cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
+        cell2 = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
+    elif rnn_cell == 'lstm':
+        cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
+        cell2 = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
+    else:
+        cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+        cell2 = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+    
+    cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
+    cell2 = tf.contrib.rnn.DropoutWrapper(cell2, output_keep_prob=1.0 - dropout)
+    rnn_outputs, final_state = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x, dtype=tf.float32)
+    
+    outputs1 = rnn_outputs[0]
+    outputs2 = rnn_outputs[1]
+    logits1 = tf.reshape(
+                tf.matmul(tf.reshape(outputs1, [-1, n_hidden]), W) + b,
+                [-1, num_steps, numOfPhones])
+    
+    logits2 = tf.reshape(
+                tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
+                [-1, num_steps, numOfPhones])
+    #[-1, num_steps, numOfPhones])
+    #half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
+    #_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
+    #logits = tf.concat([half_logits1, half_logits2], 1)
+    logits = tf.add(logits1, logits2)
+    
+    pred = tf.nn.softmax(logits)
+    
+    trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+    
+    #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
+    
+    # Model evaluation
+    correct_pred = tf.equal(tf.argmax(pred,2), tf.argmax(trueLabel,2))
+    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 CURSOR_UP_ONE = '\033[F'
 ERASE_LINE = '\033[K'
