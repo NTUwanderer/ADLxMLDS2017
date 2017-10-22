@@ -84,9 +84,10 @@ for frame in test.values:
             files.append(group)
 
         frameIds.append(frame[0][:-2])
-        frame.pop(0)
-        group = [frame] * num_steps
-        continue
+        # frame.pop(0)
+        # group = [frame] * num_steps
+        group = []
+        # continue
 
     frame.pop(0)
     group.append(frame)
@@ -200,12 +201,11 @@ with tf.Session() as session:
 
         onehot_pred = session.run(pred, feed_dict={x: fbanks})
 
-        myPred = onehot_pred[:,-1]
-        # size = onehot_pred.shape[0]
-        # myPred = np.zeros([size + second_half_num + 1, numOfPhones])
-        # for j in range(size):
-        #     for k in range(second_half_num):
-        #         myPred[j + k] = np.add(myPred[j + k], onehot_pred[j][k])
+        myPred = np.zeros([len(group), numOfPhones])
+        for index in range(onehot_pred.shape[0]):
+            for j in range(num_steps):
+                for k in range(numOfPhones):
+                    myPred[index + j][k] += onehot_pred[index][j][k]
         onehot_pred_index = tf.argmax(myPred, 1).eval()
 
         trimmed_pred_index = myTrim(onehot_pred_index)

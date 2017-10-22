@@ -91,19 +91,21 @@ for frame in train_with_label.values:
         if len(group) > 0:
             if random.randint(0, 10) == 0:
                 validation_files.append(group)
-                label = label[num_steps - 1:]
+                # label = label[num_steps - 1:]
                 validation_labels.append(label)
             else:
                 total_length += len(group) - num_steps + 1
                 files.append(group)
                 labels.append(label)
 
-        frame.pop(0)
-        l = phoneToIndex[map1[frame.pop()]]
+        # frame.pop(0)
+        # l = phoneToIndex[map1[frame.pop()]]
 
-        group = [frame] * num_steps
-        label = [l] * num_steps
-        continue
+        # group = [frame] * num_steps
+        # label = [l] * num_steps
+        group = []
+        label = []
+        # continue
     
     frame.pop(0)
     label.append(phoneToIndex[map1[frame.pop()]])
@@ -265,7 +267,11 @@ with tf.Session() as session:
                 fbanks[j] = np.array(group[j:j+num_steps])
 
             onehot_pred = session.run(pred, feed_dict={x: fbanks})
-            myPred = onehot_pred[:,-1]
+            myPred = np.zeros([len(label), numOfPhones])
+            for i in range(onehot_pred.shape[0]):
+                for j in range(num_steps):
+                    for k in range(numOfPhones):
+                        myPred[i + j][k] += onehot_pred[i][j][k]
             onehot_pred_index = tf.argmax(myPred, 1).eval()
 
             if len(label) != len(onehot_pred_index):
