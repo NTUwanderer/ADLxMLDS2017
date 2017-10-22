@@ -264,13 +264,13 @@ with tf.Session() as session:
                 loss_total += loss
                 acc_total += acc
 
-                if count != 1:
+                if batch_count != 1:
                     print(CURSOR_UP_ONE + ERASE_LINE + CURSOR_UP_ONE)
 
                 print("Epoch= " + str(step + 1) + "/" + str(epoch) + ", round= " + \
-                    str(batch_count) + "/" + str(total_round) + ", Average Loss= " + \
-                    "{:.6f}".format(loss_total/(count+1)) + ", Average Accuracy= " + \
-                    "{:.2f}%".format(100*acc_total/(count+1)) + ", Loss= " + \
+                    str(batch_count) + "/" + str(batch_round) + ", Average Loss= " + \
+                    "{:.6f}".format(loss_total/(batch_count+1)) + ", Average Accuracy= " + \
+                    "{:.2f}%".format(100*acc_total/(batch_count+1)) + ", Loss= " + \
                     "{:.6f}".format(loss) + ", Accuracy= " + \
                     "{:.2f}%".format(100*acc))
 
