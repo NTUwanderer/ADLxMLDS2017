@@ -9,7 +9,7 @@ parser.add_argument("data_path", help="path to directory data")
 parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc', 'both'], help="default fbank")
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
-parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
+parser.add_argument('-c', '--n_hidden', default=100, type=int, help="n_hidden in LSTM")
 parser.add_argument('-r', '--rnn_cell', default="rnn", choices = ['rnn', 'lstm', 'gru'], help="Which basic cell")
 parser.add_argument('-e', '--epoch', default=10, type=int, help="num of epoch")
 parser.add_argument('-l', '--n_layers', default=2, type=int, help="num of layers")
@@ -46,6 +46,84 @@ first_half_num = int(num_steps / 2)
 # first_half_num = 0
 second_half_num = num_steps - first_half_num
 
+learning_rate = 0.0001
+
+if feature == 'fbank' or feature == 'mfcc':
+    if feature == 'fbank':
+        numOfFeatures = 69
+    else:
+        numOfFeatures = 39
+else:
+    numOfFeatures = 108
+
+batch_size = 128
+with tf.device(device_name):
+    x = tf.placeholder(tf.float32, [batch_size, num_steps, numOfFeatures], name="input_placeholder")
+    y = tf.placeholder(tf.int32, [batch_size, num_steps], name="labels_placeholder")
+    #init_state = tf.zeros([batch_size, n_hidden])
+    with tf.variable_scope('softmax'):
+        W = tf.get_variable('W', [n_hidden, numOfPhones])
+        b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
+    
+    x_ = tf.reshape(x, [batch_size, num_steps, numOfFeatures, 1])
+    
+    tempW = tf.Variable(tf.random_normal([1, 3, 1, 64], stddev=1e-3), dtype=tf.float32)
+    tempB = tf.Variable(tf.random_normal([64], stddev=1e-3), dtype=tf.float32)
+    conv1 = tf.nn.conv2d(
+            input=x_,
+            filter=tempW,
+            strides=[1, 1, 3, 1],
+            padding='VALID'
+            )
+    conv1_relu = tf.nn.relu(conv1 + tempB)
+    conv1_relu_r = tf.reshape(conv1_relu, [batch_size, num_steps, int(numOfFeatures/3) * 64])
+    cnn_output = tf.layers.dense(
+            inputs=conv1_relu_r,
+            units=int(numOfFeatures/3)
+            )
+
+    #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
+    if rnn_cell == 'gru':
+        cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
+        cell2 = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
+    elif rnn_cell == 'lstm':
+        cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
+        cell2 = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
+    else:
+        cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+        cell2 = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
+    
+    cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
+    cell2 = tf.contrib.rnn.DropoutWrapper(cell2, output_keep_prob=1.0 - dropout)
+    rnn_outputs, final_state = tf.nn.bidirectional_dynamic_rnn(cell, cell2, cnn_output, dtype=tf.float32)
+    
+    outputs1 = rnn_outputs[0]
+    outputs2 = rnn_outputs[1]
+    logits1 = tf.reshape(
+                tf.matmul(tf.reshape(outputs1, [-1, n_hidden]), W) + b,
+                [-1, num_steps, numOfPhones])
+    
+    logits2 = tf.reshape(
+                tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
+                [-1, num_steps, numOfPhones])
+    #[-1, num_steps, numOfPhones])
+    #half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
+    #_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
+    #logits = tf.concat([half_logits1, half_logits2], 1)
+    logits = tf.add(logits1, logits2)
+    
+    pred = tf.nn.softmax(logits)
+    
+    trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+    
+    #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
+    
+    # Model evaluation
+    correct_pred = tf.equal(tf.argmax(pred,2), tf.argmax(trueLabel,2))
+    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+
 map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = None)
 
 map1 = dict()
@@ -62,10 +140,8 @@ for trans in map1_table.values:
 
 if feature == 'fbank' or feature == 'mfcc':
     if feature == 'fbank':
-        numOfFeatures = 69
         train_path = '/fbank/train.ark'
     else:
-        numOfFeatures = 39
         train_path = '/mfcc/train.ark'
     train_col = list(range(numOfFeatures))
     train_col.insert(0, 'frame')
@@ -78,7 +154,6 @@ if feature == 'fbank' or feature == 'mfcc':
     del train
     del label
 else:
-    numOfFeatures = 108
     train_path = '/fbank/train.ark'
     train_path2 = '/mfcc/train.ark'
     train_col = list(range(69))
@@ -166,58 +241,6 @@ def build_dataset(words):
     return dictionary, reverse_dictionary
 
 # Parameters
-learning_rate = 0.0001
-
-batch_size = None
-with tf.device(device_name):
-    x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
-    y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
-    #init_state = tf.zeros([batch_size, n_hidden])
-    with tf.variable_scope('softmax'):
-        W = tf.get_variable('W', [n_hidden, numOfPhones])
-        b = tf.get_variable('b', [numOfPhones], initializer=tf.constant_initializer(0.0))
-    
-    #cell = tf.contrib.rnn.BasicRNNCell(n_hidden)
-    if rnn_cell == 'gru':
-        cell = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
-        cell2 = rnn.MultiRNNCell([rnn.GRUCell(n_hidden)  for i in range(n_layers)])
-    elif rnn_cell == 'lstm':
-        cell = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
-        cell2 = rnn.MultiRNNCell([rnn.LSTMCell(n_hidden, state_is_tuple=True)  for i in range(n_layers)], state_is_tuple=True)
-    else:
-        cell = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
-        cell2 = rnn.MultiRNNCell([rnn.BasicRNNCell(n_hidden)  for i in range(n_layers)])
-    
-    cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=1.0 - dropout)
-    cell2 = tf.contrib.rnn.DropoutWrapper(cell2, output_keep_prob=1.0 - dropout)
-    rnn_outputs, final_state = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x, dtype=tf.float32)
-    
-    outputs1 = rnn_outputs[0]
-    outputs2 = rnn_outputs[1]
-    logits1 = tf.reshape(
-                tf.matmul(tf.reshape(outputs1, [-1, n_hidden]), W) + b,
-                [-1, num_steps, numOfPhones])
-    
-    logits2 = tf.reshape(
-                tf.matmul(tf.reshape(outputs2, [-1, n_hidden]), W) + b,
-                [-1, num_steps, numOfPhones])
-    #[-1, num_steps, numOfPhones])
-    #half_logits1, _1 = tf.split(logits1, [first_half_num, second_half_num], 1)
-    #_2, half_logits2 = tf.split(logits2, [first_half_num, second_half_num], 1)
-    #logits = tf.concat([half_logits1, half_logits2], 1)
-    logits = tf.add(logits1, logits2)
-    
-    pred = tf.nn.softmax(logits)
-    
-    trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
-    
-    #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
-    
-    # Model evaluation
-    correct_pred = tf.equal(tf.argmax(pred,2), tf.argmax(trueLabel,2))
-    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 CURSOR_UP_ONE = '\033[F'
 ERASE_LINE = '\033[K'
@@ -251,7 +274,7 @@ with tf.Session() as session:
                 shuffledLabels[newIndex] = label[i:i+num_steps]
                 counter += 1
                 
-        tempBatchSize = 128
+        tempBatchSize = batch_size
 
         count = 0
 
