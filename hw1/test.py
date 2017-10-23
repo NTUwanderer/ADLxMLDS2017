@@ -48,14 +48,19 @@ map2_table = pd.read_table(data_path + "/48phone_char.map", sep="\t", header = N
 map1 = dict()
 phoneToIndex = dict()
 indexToPhone = []
+phoneToOrigIndex = dict()
 
 counter = 0
+origCounter = 0
 for trans in map1_table.values:
     map1[trans[0]] = trans[1]
     if trans[1] not in phoneToIndex:
         phoneToIndex[trans[1]] = counter
         indexToPhone.append(trans[1])
         counter += 1
+
+    phoneToOrigIndex[trans[0]] = origCounter
+    origCounter += 1
 
 map2 = dict()
 for trans in map2_table.values:
@@ -112,6 +117,8 @@ learning_rate = 0.001
 batch_size = None
 with tf.device(device_name):
     x = tf.placeholder("float", [batch_size, num_steps, numOfFeatures], name="input_placeholder")
+    phoneToOrigIndex[trans[0]] = origCounter
+    origCounter += 1
     y = tf.placeholder("int32", [batch_size, num_steps], name="labels_placeholder")
     #init_state = tf.zeros([batch_size, n_hidden])
     with tf.variable_scope('softmax'):
@@ -218,7 +225,7 @@ with tf.Session() as session:
 
         trimmed_pred_index = myTrim(onehot_pred_index)
     
-        phone_pred = ''.join([ map2[indexToPhone[index]]  for index in trimmed_pred_index ])
+        phone_pred = ''.join([ map2[map1[indexToOrigPhone[index]]]  for index in trimmed_pred_index ])
 
         lenCounter += len(phone_pred)
         outputCSV.loc[i] = [frameIds[i], phone_pred]

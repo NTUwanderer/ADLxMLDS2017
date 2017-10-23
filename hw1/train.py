@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import random, collections, time, argparse
 
-numOfPhones = 39
+numOfPhones = 48
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path", help="path to directory data")
@@ -51,14 +51,19 @@ map1_table = pd.read_table(data_path + "/phones/48_39.map", sep="\t", header = N
 map1 = dict()
 phoneToIndex = dict()
 indexToPhone = []
+phoneToOrigIndex = dict()
 
 counter = 0
+origCounter = 0
 for trans in map1_table.values:
     map1[trans[0]] = trans[1]
     if trans[1] not in phoneToIndex:
         phoneToIndex[trans[1]] = counter
         indexToPhone.append(trans[1])
         counter += 1
+
+    phoneToOrigIndex[trans[0]] = origCounter
+    origCounter += 1
 
 if feature == 'fbank' or feature == 'mfcc':
     if feature == 'fbank':
@@ -132,7 +137,8 @@ for frame in train_with_label.values:
         # continue
     
     frame.pop(0)
-    label.append(phoneToIndex[map1[frame.pop()]])
+    #label.append(phoneToIndex[map1[frame.pop()]])
+    label.append(phoneToOrigIndex[frame.pop()])
     group.append(frame)
 
 del train_with_label
