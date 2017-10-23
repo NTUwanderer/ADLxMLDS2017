@@ -241,7 +241,30 @@ with tf.Session() as session:
         for j in range(len(group) - num_steps + 1):
             fbanks[j] = np.array(group[j:j+num_steps])
 
-        onehot_pred = session.run(pred, feed_dict={x: fbanks})
+        onehot_pred = np.zeros([0, num_steps, numOfPhones])
+        while fbanks.shape[0] > 0:
+            if fbanks.shape[0] > batch_size:
+                two_parts = np.split(fbanks, [batch_size, fbanks.shape[0]])
+                temp_fbanks = two_parts[0]
+                fbanks = two_parts[1]
+                del two_parts
+                temp_onehot_pred = session.run(pred, feed_dict={x: temp_fbanks})
+
+            else:
+                origSize = fbanks.shape[0]
+                repeatSize = int(batch_size / fbanks.shape[0]) + 1
+                fbanks = np.repeat(fbanks, repeatSize, axis=0)
+                tmep_fbanks = np.split(fbanks, [batch_size, fbanks.shape[0]])[0]
+                fbanks = np.zeros([0, num_steps, numOfFeatures])
+                temp_onehot_pred = session.run(pred, feed_dict={x: temp_fbanks})
+
+                temp_onehot_pred = np.split(temp_onehot_pred, [origSize, batch_size])[0]
+
+            onehot_pred = np.concatenate((onehot_pred, temp_onehot_pred))
+
+            temp_onehot_pred = session.run(pred, feed_dict={})
+        
+            onehot_pred = session.run(pred, feed_dict={x: fbanks})
 
         myPred = np.zeros([len(group), numOfPhones])
         for index in range(onehot_pred.shape[0]):
