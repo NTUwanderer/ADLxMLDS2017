@@ -88,7 +88,7 @@ else:
     label_col = ['frame', 'label']
     train = pd.read_table(data_path + train_path, sep=" ", header = None, names = train_col)
     train2 = pd.read_table(data_path + train_path2, sep=" ", header = None, names = train_col2)
-    train = train.join(train2.set_index('frame'), on='frame')
+    train = pd.merge(train, train2, on='frame')
     del train2
 
     label = pd.read_table(data_path + "/label/train.lab", sep=",", header = None, names = label_col)
