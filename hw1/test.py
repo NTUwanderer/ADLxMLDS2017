@@ -61,21 +61,30 @@ map2 = dict()
 for trans in map2_table.values:
     map2[trans[0]] = trans[2]
 
-if feature == 'fbank':
-    numOfFeatures = 69
-    test_path = '/fbank/test.ark'
-else:
     numOfFeatures = 39
     test_path = '/mfcc/test.ark'
+if feature == 'fbank' or feature == 'mfcc':
+    if feature == 'fbank':
+        test_path = '/fbank/test.ark'
+    else:
+        test_path = '/mfcc/test.ark'
 
-train_dtype = {'frame': np.string_}
-for i in range(numOfFeatures):
-    train_dtype[i] = np.float64
+    test_col = list(range(numOfFeatures))
+    test_col.insert(0, 'frame')
+    
+    test = pd.read_table(data_path + test_path, sep=" ", header = None, names = test_col)
 
-test_col = list(range(numOfFeatures))
-test_col.insert(0, 'frame')
-
-test = pd.read_table(data_path + test_path, sep=" ", header = None, names = test_col)
+else:
+    test_path = '/fbank/test.ark'
+    test_path2 = '/mfcc/test.ark'
+    test_col = list(range(69))
+    test_col.insert(0, 'frame')
+    test_col2 = list(range(39))
+    test_col2.insert(0, 'frame')
+    test = pd.read_table(data_path + test_path, sep=" ", header = None, names = test_col)
+    test2 = pd.read_table(data_path + test_path2, sep=" ", header = None, names = test_col2)
+    test = pd.merge(test, test2, on='frame')
+    del test2
 
 suffix="_1"
 
