@@ -6,7 +6,7 @@ numOfPhones = 39
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path", help="path to directory data")
-parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
+parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc', 'both'], help="default fbank")
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="write model to path")
 parser.add_argument('-c', '--n_hidden', default=numOfPhones, type=int, help="n_hidden in LSTM")
@@ -60,23 +60,42 @@ for trans in map1_table.values:
         indexToPhone.append(trans[1])
         counter += 1
 
-if feature == 'fbank':
-    numOfFeatures = 69
-    train_path = '/fbank/train.ark'
+if feature == 'fbank' or feature == 'mfcc':
+    if feature == 'fbank':
+        numOfFeatures = 69
+        train_path = '/fbank/train.ark'
+    else:
+        numOfFeatures = 39
+        train_path = '/mfcc/train.ark'
+    train_col = list(range(numOfFeatures))
+    train_col.insert(0, 'frame')
+    label_col = ['frame', 'label']
+    
+    train = pd.read_table(data_path + train_path, sep=" ", header = None, names = train_col)
+    label = pd.read_table(data_path + "/label/train.lab", sep=",", header = None, names = label_col)
+    
+    train_with_label = train.join(label.set_index('frame'), on='frame')
+    del train
+    del label
 else:
-    numOfFeatures = 39
-    train_path = '/mfcc/train.ark'
+    numOfFeatures = 108
+    train_path = '/fbank/train.ark'
+    train_path2 = '/mfcc/train.ark'
+    train_col = list(range(69))
+    train_col.insert(0, 'frame')
+    train_col2 = list(range(39))
+    train_col2.insert(0, 'frame')
+    label_col = ['frame', 'label']
+    train = pd.read_table(data_path + train_path, sep=" ", header = None, names = train_col)
+    train2 = pd.read_table(data_path + train_path2, sep=" ", header = None, names = train_col2)
+    train = train.join(train2.set_index('frame'), on='frame')
+    del train2
 
-train_col = list(range(numOfFeatures))
-train_col.insert(0, 'frame')
-label_col = ['frame', 'label']
+    label = pd.read_table(data_path + "/label/train.lab", sep=",", header = None, names = label_col)
 
-train = pd.read_table(data_path + train_path, sep=" ", header = None, names = train_col)
-label = pd.read_table(data_path + "/label/train.lab", sep=",", header = None, names = label_col)
-
-train_with_label = train.join(label.set_index('frame'), on='frame')
-del train
-del label
+    train_with_label = train.join(label.set_index('frame'), on='frame')
+    del train
+    del label
 
 suffix="_1"
 
