@@ -328,7 +328,7 @@ with tf.Session() as session:
                     origSize = fbanks.shape[0]
                     repeatSize = int(batch_size / fbanks.shape[0]) + 1
                     fbanks = np.repeat(fbanks, repeatSize, axis=0)
-                    tmep_fbanks = np.split(fbanks, [batch_size, fbanks.shape[0]])[0]
+                    temp_fbanks = np.split(fbanks, [batch_size, fbanks.shape[0]])[0]
                     fbanks = np.zeros([0, num_steps, numOfFeatures])
                     temp_onehot_pred = session.run(pred, feed_dict={x: temp_fbanks})
 
