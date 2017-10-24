@@ -42,6 +42,8 @@ first_half_num = int(num_steps / 2)
 # first_half_num = 0
 second_half_num = num_steps - first_half_num
 
+tf.reset_default_graph()
+
 learning_rate = 0.0001
 
 if feature == 'fbank' or feature == 'mfcc':
@@ -190,8 +192,6 @@ del test
 del group
 
 files = np.array(files)
-
-tf.reset_default_graph()
 
 
 CURSOR_UP_ONE = '\033[F'
