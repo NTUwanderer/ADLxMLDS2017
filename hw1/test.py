@@ -4,7 +4,7 @@ numOfPhones = 39
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path", help="path to directory data")
-parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc'], help="default fbank")
+parser.add_argument('-f', '--feature', default="fbank", choices = ['fbank', 'mfcc', 'both'], help="default fbank")
 parser.add_argument('-n', '--num_steps', default=5, type=int, help="set num_steps to truncate")
 parser.add_argument('-m', '--model_path', default="./tmp/model.ckpt", help="read model from path")
 parser.add_argument('-c', '--n_hidden', default=100, type=int, help="n_hidden in LSTM")
