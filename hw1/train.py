@@ -167,6 +167,7 @@ def build_dataset(words):
 
 # Parameters
 learning_rate = 0.0001
+beta = 0.01
 
 batch_size = None
 with tf.device(device_name):
@@ -211,7 +212,9 @@ with tf.device(device_name):
     
     trueLabel = tf.one_hot(y, numOfPhones, on_value=1.0, off_value=0.0)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=trueLabel))
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+    regularizer = tf.nn.l2_loss(W)
+    loss = tf.reduce_mean(cost + beta * regularizer)
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)
     
     #optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(cost)
     
