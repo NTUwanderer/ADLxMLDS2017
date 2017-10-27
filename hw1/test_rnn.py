@@ -61,13 +61,13 @@ map2 = dict()
 for trans in map2_table.values:
     map2[trans[0]] = trans[2]
 
-    numOfFeatures = 39
-    test_path = '/mfcc/test.ark'
 if feature == 'fbank' or feature == 'mfcc':
     if feature == 'fbank':
         test_path = '/fbank/test.ark'
+        numOfFeatures = 69
     else:
         test_path = '/mfcc/test.ark'
+        numOfFeatures = 39
 
     test_col = list(range(numOfFeatures))
     test_col.insert(0, 'frame')
