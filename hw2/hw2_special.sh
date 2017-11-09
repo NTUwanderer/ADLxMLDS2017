@@ -1,1 +1,1 @@
-python special.py $1 special_model/model-95 $2
+python special.py $1 special_model/model-6 $2
