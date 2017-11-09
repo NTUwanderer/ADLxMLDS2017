@@ -1,3 +1,10 @@
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("model_path", help="Path to model to retrain")
+parser.add_argument("index", type=int, help="index of starting epoch")
+args = parser.parse_args()
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -284,6 +291,7 @@ def train():
     # with tf.variable_scope(tf.get_variable_scope(), reuse=False):
     train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
     tf.global_variables_initializer().run()
+    saver.restore(sess, args.model_path)
 
     #new_saver = tf.train.Saver()
     #new_saver = tf.train.import_meta_graph('./rgb_models/model-1000.meta')
@@ -292,7 +300,7 @@ def train():
     loss_fd = open('loss.txt', 'w')
     loss_to_draw = []
 
-    for epoch in range(0, n_epochs):
+    for epoch in range(args.index, n_epochs):
         loss_to_draw_epoch = []
 
         index = list(range(len(captions)))
