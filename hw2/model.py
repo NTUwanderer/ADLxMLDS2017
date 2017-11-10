@@ -180,7 +180,7 @@ n_video_lstm_step = 80
 n_caption_lstm_step = 40
 n_frame_step = 80
 
-n_epochs = 200
+n_epochs = 40
 batch_size = 32
 learning_rate = 0.001
 
@@ -296,7 +296,7 @@ def train():
         loss_to_draw_epoch = []
 
         index = list(range(len(captions)))
-        np.random.shuffle(index)
+        # np.random.shuffle(index)
         s_captions = captions[index]
         s_v_ids = v_ids[index]
 
@@ -375,7 +375,7 @@ def train():
 
         if np.mod(epoch, 1) == 0:
             print("Epoch ", epoch, " is done. Saving the model ...")
-            saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
+            saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch, max_to_keep=n_epochs)
 
     loss_fd.close()
 
