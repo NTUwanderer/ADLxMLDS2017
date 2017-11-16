@@ -3,6 +3,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path", help="Path to data")
 parser.add_argument("-t", "--test", action="store_true", help="Test rather than train")
+parser.add_argument("--output_model_path", help="Where to store models of training")
 parser.add_argument("-m", "--model_path", help="Path to model to retrain")
 parser.add_argument("-o", "--output_path", help="Where to store predictions")
 args = parser.parse_args()
@@ -177,8 +178,6 @@ video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
 
 video_train_label_path = os.path.join(video_path, 'training_label.json')
 video_test_label_path = os.path.join(video_path, 'testing_label.json')
-
-model_path = './models'
 
 #=======================================================================================
 # Train Parameters
@@ -386,7 +385,7 @@ def train():
 
         if np.mod(epoch, 1) == 0:
             print("Epoch ", epoch, " is done. Saving the model ...")
-            saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch, max_to_keep=n_epochs)
+            saver.save(sess, args.output_model_path, global_step=epoch, max_to_keep=n_epochs)
 
     loss_fd.close()
 
