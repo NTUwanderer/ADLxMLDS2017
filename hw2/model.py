@@ -1,3 +1,12 @@
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("data_path", help="Path to data")
+parser.add_argument("-t", "--test", action="store_true", help="Test rather than train")
+parser.add_argument("-m", "--model_path", help="Path to model to retrain")
+parser.add_argument("-o", "--output_path", help="Where to store predictions")
+args = parser.parse_args()
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -109,8 +118,10 @@ class Video_Caption_Generator():
         image_emb = tf.nn.xw_plus_b(video_flat, self.encode_image_W, self.encode_image_b)
         image_emb = tf.reshape(image_emb, [1, self.n_video_lstm_step, self.dim_hidden])
 
-        state1 = tf.zeros([1, self.lstm1.state_size])
-        state2 = tf.zeros([1, self.lstm2.state_size])
+        size1 = self.lstm1.state_size
+        size2 = self.lstm2.state_size
+        state1 = tf.split(tf.zeros([1, size1[0] + size1[1]]), size1, axis=1)
+        state2 = tf.split(tf.zeros([1, size2[0] + size2[1]]), size2, axis=1)
         padding = tf.zeros([1, self.dim_hidden])
 
         generated_words = []
@@ -159,13 +170,13 @@ class Video_Caption_Generator():
 #=====================================================================================
 # Global Parameters
 #=====================================================================================
-video_path = './data'
+video_path = args.data_path
 
-video_train_feat_path = './data/training_data/feat'
-video_test_feat_path = './data/testing_data/feat'
+video_train_feat_path = os.path.join(video_path, 'training_data/feat')
+video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
 
-video_train_label_path = './data/training_label.json'
-video_test_label_path = './data/testing_label.json'
+video_train_label_path = os.path.join(video_path, 'training_label.json')
+video_test_label_path = os.path.join(video_path, 'testing_label.json')
 
 model_path = './models'
 
@@ -379,8 +390,64 @@ def train():
 
     loss_fd.close()
 
+def test(model_path='./models/model-100'):
+    test_captions = get_video_data(video_test_label_path)
+    
+    test_videos = []
+    for video in test_captions:
+        test_videos.append(video['id'])
+
+    ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
+
+    bias_init_vector = np.load('./bias_init_vector.npy')
+
+    model = Video_Caption_Generator(
+            dim_image=dim_image,
+            n_words=len(ixtoword),
+            dim_hidden=dim_hidden,
+            batch_size=batch_size,
+            n_lstm_steps=n_frame_step,
+            n_video_lstm_step=n_video_lstm_step,
+            n_caption_lstm_step=n_caption_lstm_step,
+            bias_init_vector=bias_init_vector)
+
+    video_tf, video_mask_tf, caption_tf, probs_tf, last_embed_tf = model.build_generator()
+
+    sess = tf.InteractiveSession()
+
+    saver = tf.train.Saver()
+    saver.restore(sess, model_path)
+
+    test_output_txt_fd = open(args.output_path, 'w')
+    for idx, video_feat_path in enumerate(test_videos):
+        video_feat = np.load(os.path.join(video_test_feat_path, video_feat_path + '.npy'))[None, ...]
+        #video_feat = np.load(video_feat_path)
+        #video_mask = np.ones((video_feat.shape[0], video_feat.shape[1]))
+        video_mask = np.ones((video_feat.shape[0], video_feat.shape[1]))
+
+        generated_word_index = sess.run(caption_tf, feed_dict={video_tf:video_feat, video_mask_tf:video_mask})
+        generated_words = ixtoword[generated_word_index]
+
+        punctuation = np.argmax(np.array(generated_words) == '<eos>') + 1
+        generated_words = generated_words[:punctuation]
+
+        generated_sentence = ' '.join(generated_words)
+        generated_sentence = generated_sentence.replace('<bos> ', '')
+        generated_sentence = generated_sentence.replace(' <eos>', '')
+        generated_sentence = generated_sentence.replace(' <unk>', '')
+        generated_sentence = generated_sentence.replace('<unk>', '')
+        if idx != 0:
+            test_output_txt_fd.write('\n')
+        test_output_txt_fd.write(video_feat_path + ',')
+        test_output_txt_fd.write(generated_sentence)
+
 def main():
-    train()
+    if args.test:
+        print ("Testing")
+        test(args.model_path)
+    else:
+        print ("Training")
+        train()
 
 if __name__=="__main__":
     main()
