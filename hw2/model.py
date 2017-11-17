@@ -242,7 +242,7 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=5):
 
     return wordtoix, ixtoword, bias_init_vector
 
-def train():
+def createDict():
     train_captions = get_video_data(video_train_label_path)
 
     captions_list = list([])
@@ -268,10 +268,17 @@ def train():
     captions = np.asarray(captions, dtype=np.object)
 
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=3)
-    
+
     np.save("./wordtoix", wordtoix)
     np.save('./ixtoword', ixtoword)
     np.save("./bias_init_vector", bias_init_vector)
+    
+    return v_ids, captions, wordtoix, ixtoword, bias_init_vector
+
+
+def train():
+
+    v_ids, captions, wordtoix, ixtoword, bias_init_vector = createDict()
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -289,8 +296,8 @@ def train():
     # sess = tf.Session()
     
     # my tensorflow version is 0.12.1, I write the saver with version 1.0
-    # saver = tf.train.Saver(max_to_keep=100, write_version=1)
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(max_to_keep=100)
+    # saver = tf.train.Saver()
     # with tf.variable_scope(tf.get_variable_scope(), reuse=False):
     train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
     tf.global_variables_initializer().run()
@@ -385,20 +392,25 @@ def train():
 
         if np.mod(epoch, 1) == 0:
             print("Epoch ", epoch, " is done. Saving the model ...")
-            saver.save(sess, args.output_model_path, global_step=epoch, max_to_keep=n_epochs)
+            saver.save(sess, args.output_model_path, global_step=epoch)
 
     loss_fd.close()
 
 def test(model_path='./models/model-100'):
+
+    # _, __, w, i, b = createDict()
+
+    ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
+    # ixtoword = pd.Series(i)
+
+    bias_init_vector = np.load('./bias_init_vector.npy')
+    # bias_init_vector = b
+
     test_captions = get_video_data(video_test_label_path)
     
     test_videos = []
     for video in test_captions:
         test_videos.append(video['id'])
-
-    ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
-
-    bias_init_vector = np.load('./bias_init_vector.npy')
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
