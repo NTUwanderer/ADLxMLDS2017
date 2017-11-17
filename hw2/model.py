@@ -269,9 +269,10 @@ def createDict():
 
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=3)
 
-    np.save("./wordtoix", wordtoix)
-    np.save('./ixtoword', ixtoword)
-    np.save("./bias_init_vector", bias_init_vector)
+    dict_path = 'dict'
+    np.save('./' + dict_path + '/wordtoix', wordtoix)
+    np.save('./' + dict_path + '/ixtoword', ixtoword)
+    np.save('./' + dict_path + '/bias_init_vector', bias_init_vector)
     
     return v_ids, captions, wordtoix, ixtoword, bias_init_vector
 
@@ -398,13 +399,13 @@ def train():
 
 def test(model_path='./models/model-100'):
 
-    # _, __, w, i, b = createDict()
+    _, __, w, i, b = createDict()
 
-    ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
-    # ixtoword = pd.Series(i)
+    # ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
+    ixtoword = pd.Series(i)
 
-    bias_init_vector = np.load('./bias_init_vector.npy')
-    # bias_init_vector = b
+    # bias_init_vector = np.load('./bias_init_vector.npy')
+    bias_init_vector = b
 
     test_captions = get_video_data(video_test_label_path)
     
