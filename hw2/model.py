@@ -179,6 +179,8 @@ video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
 video_train_label_path = os.path.join(video_path, 'training_label.json')
 video_test_label_path = os.path.join(video_path, 'testing_label.json')
 
+dict_path = 'dict'
+
 #=======================================================================================
 # Train Parameters
 #=======================================================================================
@@ -269,7 +271,6 @@ def createDict():
 
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=3)
 
-    dict_path = 'dict'
     np.save('./' + dict_path + '/wordtoix', wordtoix)
     np.save('./' + dict_path + '/ixtoword', ixtoword)
     np.save('./' + dict_path + '/bias_init_vector', bias_init_vector)
@@ -399,19 +400,20 @@ def train():
 
 def test(model_path='./models/model-100'):
 
-    _, __, w, i, b = createDict()
-
-    # ixtoword = pd.Series(np.load('./ixtoword.npy').tolist())
-    ixtoword = pd.Series(i)
-
-    # bias_init_vector = np.load('./bias_init_vector.npy')
-    bias_init_vector = b
-
     test_captions = get_video_data(video_test_label_path)
     
     test_videos = []
     for video in test_captions:
         test_videos.append(video['id'])
+
+    # _, __, w, i, b = createDict()
+
+    # ixtoword = pd.Series(i)
+
+    # bias_init_vector = b
+
+    ixtoword = pd.Series(np.load('./' + dict_path + 'ixtoword.npy').tolist())
+    bias_init_vector = np.load('./' + dict_path + 'bias_init_vector.npy')
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
