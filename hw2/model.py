@@ -40,8 +40,8 @@ class Video_Caption_Generator():
         self.encode_image_W = tf.Variable( tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable( tf.zeros([dim_hidden]), name='encode_image_b')
 
-        self.attention_W = tf.Variable( tf.random_uniform([n_video_lstm_step, n_video_lstm_step], -0.1, 0.1), name='attention_W' )
-        self.attention_b = tf.Variable( tf.random_uniform([n_video_lstm_step], -0.1, 0.1), name='attention_b' )
+        self.attention_W = tf.Variable( tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='attention_W' )
+        self.c_W = tf.Variable( tf.random_uniform([2 * dim_hidden, dim_hidden], -0.1, 0.1), name='attention_W' )
 
         self.embed_word_W = tf.Variable(tf.random_uniform([dim_hidden, n_words], -0.1,0.1), name='embed_word_W')
         if bias_init_vector is not None:
@@ -77,22 +77,15 @@ class Video_Caption_Generator():
                     tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(tf.concat([padding, image_emb[:,i,:]], 1), state1)
+                    output1, state1 = self.lstm1(image_emb[:,i,:], state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([padding, output1], 1), state2)
-                    output2 = tf.reshape(output2, [self.batch_size, self.dim_hidden, 1])
+                    output2 = tf.reshape(output2, [1, self.batch_size, self.dim_hidden])
                     if i == 0:
                         attention_X = output2
                     else:
-                        attention_X = tf.concat([attention_X, output2], 2)
-
-            attention_X = tf.reshape(attention_X, [-1, self.n_video_lstm_step])
-            attention = tf.nn.xw_plus_b(attention_X, self.attention_W, self.attention_b)
-            attention = tf.reshape(attention, [self.batch_size, self.dim_hidden, self.n_video_lstm_step])
-            attention = tf.reduce_sum(attention, 2)
-
-            print ('attention: ', attention)
+                        attention_X = tf.concat([attention_X, output2], 0)
 
             # print ('state2: ', state2)
             # print ('norm state2: ', tf.nn.l2_normalize(state2[0], 1))
@@ -115,17 +108,34 @@ class Video_Caption_Generator():
                 tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(tf.concat([attention, padding], 1), state1)
+                    output1, state1 = self.lstm1(padding, state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([current_embed, output1], 1), state2)
+
+                # print ('attention_X: ', attention_X) # n * b * h
+                # print ('output2: ', output2) # b * h
+                temp1 = tf.matmul(tf.reshape(attention_X, [-1, self.dim_hidden]), self.attention_W)
+                temp2 = tf.reshape(temp1, [self.n_video_lstm_step, self.batch_size, self.dim_hidden])
+                # print ('temp2: ', temp2)
+                temp2_1 = tf.transpose(temp2, [1, 0, 2])
+                # print ('temp2_1: ', temp2_1)
+                temp3 = tf.matmul(tf.transpose(temp2, [1, 0, 2]), tf.reshape(output2, [self.batch_size, self.dim_hidden, 1]))
+                # print ('temp3: ', temp3)
+                temp4 = tf.nn.softmax(tf.transpose(tf.reshape(temp3, [self.batch_size, self.n_video_lstm_step])))
+                # print ('temp4: ', temp4)
+                temp4_1 = tf.reshape(tf.contrib.seq2seq.tile_batch(tf.reshape(temp4, [-1]), self.dim_hidden), [self.n_video_lstm_step, self.batch_size, self.dim_hidden])
+                # print ('temp4_1: ', temp4_1)
+                temp5 = tf.reduce_sum(tf.multiply(attention_X, temp4_1), axis=0)
+                # print ('temp5: ', temp5)
 
                 labels = tf.expand_dims(caption[:, i+1], 1)
                 indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1)
                 concated = tf.concat([indices, labels], 1)
                 onehot_labels = tf.sparse_to_dense(concated, tf.stack([self.batch_size, self.n_words]), 1.0, 0.0)
 
-                logit_words = tf.nn.xw_plus_b(output2, self.embed_word_W, self.embed_word_b)
+                temp6 = tf.tanh(tf.matmul(tf.concat([output2, temp5], 1), self.c_W))
+                logit_words = tf.nn.xw_plus_b(temp6, self.embed_word_W, self.embed_word_b)
                 cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logit_words, labels=onehot_labels)
                 cross_entropy = cross_entropy * caption_mask[:,i]
                 probs.append(logit_words)
