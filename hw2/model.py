@@ -59,8 +59,6 @@ class Video_Caption_Generator():
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b ) # (batch_size*n_lstm_steps, dim_hidden)
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_lstm_steps, self.dim_hidden])
 
-        encoder_outputs = tf.Variable(tf.zeros([0, self.batch_size, self.dim_hidden]))
-        print ('encoder_outputs: ', encoder_outputs)
         # state1 = tf.zeros([self.batch_size, self.lstm1.state_size])
         # state2 = tf.zeros([self.batch_size, self.lstm2.state_size])
         size1 = self.lstm1.state_size
@@ -83,10 +81,13 @@ class Video_Caption_Generator():
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([padding, output1], 1), state2)
+                    output2 = tf.reshape(output2, [self.batch_size, self.dim_hidden, 1])
+                    if i == 0:
+                        attention_X = output2
+                    else:
+                        attention_X = tf.concat([attention_X, output2], 2)
 
-                encoder_outputs = tf.concat([encoder_outputs, tf.reshape(output1, [1, self.batch_size, self.dim_hidden])], 0)
-
-            attention_X = tf.reshape(encoder_outputs, [-1, self.n_video_lstm_step])
+            attention_X = tf.reshape(attention_X, [-1, self.n_video_lstm_step])
             attention = tf.nn.xw_plus_b(attention_X, self.attention_W, self.attention_b)
             attention = tf.reshape(attention, [self.batch_size, self.dim_hidden, self.n_video_lstm_step])
             attention = tf.reduce_sum(attention, 2)
@@ -160,10 +161,21 @@ class Video_Caption_Generator():
                     tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(image_emb[:, i, :], state1)
+                    output1, state1 = self.lstm1(tf.concat([padding, image_emb[:, i, :]], 1), state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([padding, output1], 1), state2)
+                    output2 = tf.reshape(output2, [1, self.dim_hidden, 1])
+
+                    if i == 0:
+                        attention_X = output2
+                    else:
+                        attention_X = tf.concat([attention_X, output2], 2)
+
+            attention_X = tf.reshape(attention_X, [-1, self.n_video_lstm_step])
+            attention = tf.nn.xw_plus_b(attention_X, self.attention_W, self.attention_b)
+            attention = tf.reshape(attention, [1, self.dim_hidden, self.n_video_lstm_step])
+            attention = tf.reduce_sum(attention, 2)
 
             for i in range(0, self.n_caption_lstm_step):
                 tf.get_variable_scope().reuse_variables()
@@ -173,7 +185,7 @@ class Video_Caption_Generator():
                         current_embed = tf.nn.embedding_lookup(self.Wemb, tf.ones([1], dtype=tf.int64))
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(padding, state1)
+                    output1, state1 = self.lstm1(tf.concat([attention, padding], 1), state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([current_embed, output1], 1), state2)
@@ -203,7 +215,7 @@ video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
 video_train_label_path = os.path.join(video_path, 'training_label.json')
 video_test_label_path = os.path.join(video_path, 'testing_label.json')
 
-dict_path = 'dict'
+dict_path = 'dict/'
 
 #=======================================================================================
 # Train Parameters
