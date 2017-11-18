@@ -40,6 +40,9 @@ class Video_Caption_Generator():
         self.encode_image_W = tf.Variable( tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable( tf.zeros([dim_hidden]), name='encode_image_b')
 
+        self.attention_W = tf.Variable( tf.random_uniform([n_video_lstm_step, n_video_lstm_step], -0.1, 0.1), name='attention_W' )
+        self.attention_b = tf.Variable( tf.random_uniform([n_video_lstm_step], -0.1, 0.1), name='attention_b' )
+
         self.embed_word_W = tf.Variable(tf.random_uniform([dim_hidden, n_words], -0.1,0.1), name='embed_word_W')
         if bias_init_vector is not None:
             self.embed_word_b = tf.Variable(bias_init_vector.astype(np.float32), name='embed_word_b')
@@ -56,6 +59,8 @@ class Video_Caption_Generator():
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b ) # (batch_size*n_lstm_steps, dim_hidden)
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_lstm_steps, self.dim_hidden])
 
+        encoder_outputs = tf.Variable(tf.zeros([0, self.batch_size, self.dim_hidden]))
+        print ('encoder_outputs: ', encoder_outputs)
         # state1 = tf.zeros([self.batch_size, self.lstm1.state_size])
         # state2 = tf.zeros([self.batch_size, self.lstm2.state_size])
         size1 = self.lstm1.state_size
@@ -74,11 +79,30 @@ class Video_Caption_Generator():
                     tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(image_emb[:,i,:], state1)
+                    output1, state1 = self.lstm1(tf.concat([padding, image_emb[:,i,:]], 1), state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([padding, output1], 1), state2)
 
+                encoder_outputs = tf.concat([encoder_outputs, tf.reshape(output1, [1, self.batch_size, self.dim_hidden])], 0)
+
+            attention_X = tf.reshape(encoder_outputs, [-1, self.n_video_lstm_step])
+            attention = tf.nn.xw_plus_b(attention_X, self.attention_W, self.attention_b)
+            attention = tf.reshape(attention, [self.batch_size, self.dim_hidden, self.n_video_lstm_step])
+            attention = tf.reduce_sum(attention, 2)
+
+            print ('attention: ', attention)
+
+            # print ('state2: ', state2)
+            # print ('norm state2: ', tf.nn.l2_normalize(state2[0], 1))
+            # print ('outputs: ', encoder_outputs)
+            # print ('outputs: ', tf.nn.l2_normalize(encoder_outputs[0], 1))
+
+            # myOnes = tf.ones([self.batch_size, self.dim_hidden])
+            # s = tf.multiply(tf.nn.l2_normalize(encoder_outputs[0], 1), tf.nn.l2_normalize(state2[0], 1))
+            # print ('s: ', s)
+            # simil = tf.subtract(myOnes, s)
+            # print ('simil: ', simil)
             ############################# Decoding Stage ######################################
             for i in range(0, self.n_caption_lstm_step): ## Phase 2 => only generate captions
                 #if i == 0:
@@ -90,7 +114,7 @@ class Video_Caption_Generator():
                 tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(padding, state1)
+                    output1, state1 = self.lstm1(tf.concat([attention, padding], 1), state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([current_embed, output1], 1), state2)
