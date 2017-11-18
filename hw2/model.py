@@ -171,22 +171,18 @@ class Video_Caption_Generator():
                     tf.get_variable_scope().reuse_variables()
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(tf.concat([padding, image_emb[:, i, :]], 1), state1)
+                    output1, state1 = self.lstm1(image_emb[:, i, :], state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([padding, output1], 1), state2)
-                    output2 = tf.reshape(output2, [1, self.dim_hidden, 1])
+                    output2 = tf.reshape(output2, [1, 1, self.dim_hidden])
 
                     if i == 0:
                         attention_X = output2
                     else:
-                        attention_X = tf.concat([attention_X, output2], 2)
+                        attention_X = tf.concat([attention_X, output2], 0)
 
-            attention_X = tf.reshape(attention_X, [-1, self.n_video_lstm_step])
-            attention = tf.nn.xw_plus_b(attention_X, self.attention_W, self.attention_b)
-            attention = tf.reshape(attention, [1, self.dim_hidden, self.n_video_lstm_step])
-            attention = tf.reduce_sum(attention, 2)
-
+            print ('attention_X: ', attention_X)
             for i in range(0, self.n_caption_lstm_step):
                 tf.get_variable_scope().reuse_variables()
 
@@ -195,12 +191,21 @@ class Video_Caption_Generator():
                         current_embed = tf.nn.embedding_lookup(self.Wemb, tf.ones([1], dtype=tf.int64))
 
                 with tf.variable_scope("LSTM1"):
-                    output1, state1 = self.lstm1(tf.concat([attention, padding], 1), state1)
+                    output1, state1 = self.lstm1(padding, state1)
 
                 with tf.variable_scope("LSTM2"):
                     output2, state2 = self.lstm2(tf.concat([current_embed, output1], 1), state2)
 
-                logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b)
+                temp1 = tf.matmul(tf.reshape(attention_X, [-1, self.dim_hidden]), self.attention_W)
+                temp2 = tf.reshape(temp1, [self.n_video_lstm_step, 1, self.dim_hidden])
+                temp2_1 = tf.transpose(temp2, [1, 0, 2])
+                temp3 = tf.matmul(tf.transpose(temp2, [1, 0, 2]), tf.reshape(output2, [1, self.dim_hidden, 1]))
+                temp4 = tf.nn.softmax(tf.transpose(tf.reshape(temp3, [1, self.n_video_lstm_step])))
+                temp4_1 = tf.reshape(tf.contrib.seq2seq.tile_batch(tf.reshape(temp4, [-1]), self.dim_hidden), [self.n_video_lstm_step, 1, self.dim_hidden])
+                temp5 = tf.reduce_sum(tf.multiply(attention_X, temp4_1), axis=0)
+                temp6 = tf.tanh(tf.matmul(tf.concat([output2, temp5], 1), self.c_W))
+                logit_words = tf.nn.xw_plus_b(temp6, self.embed_word_W, self.embed_word_b)
+                # logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b)
                 max_prob_index = tf.argmax(logit_words, 1)[0]
                 generated_words.append(max_prob_index)
                 probs.append(logit_words)
