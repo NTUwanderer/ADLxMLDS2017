@@ -3,6 +3,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("data_path", help="Path to data")
 parser.add_argument("-t", "--test", action="store_true", help="Test rather than train")
+parser.add_argument("-p", "--peer", action="store_true", help="Test the peer review videos")
 parser.add_argument("--output_model_path", help="Where to store models of training")
 parser.add_argument("-m", "--model_path", help="Path to model to retrain")
 parser.add_argument("-o", "--output_path", help="Where to store predictions")
@@ -174,10 +175,18 @@ class Video_Caption_Generator():
 video_path = args.data_path
 
 video_train_feat_path = os.path.join(video_path, 'training_data/feat')
-video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
+if args.peer:
+    video_test_feat_path = os.path.join(video_path, 'peer_review/feat')
+else:
+    video_test_feat_path = os.path.join(video_path, 'testing_data/feat')
 
 video_train_label_path = os.path.join(video_path, 'training_label.json')
-video_test_label_path = os.path.join(video_path, 'testing_label.json')
+# video_test_label_path = os.path.join(video_path, 'testing_label.json')
+
+if args.peer:
+    video_id_path = os.path.join(video_path, 'peer_review_id.txt')
+else:
+    video_id_path = os.path.join(video_path, 'testing_id.txt')
 
 dict_path = 'dict'
 
@@ -400,11 +409,14 @@ def train():
 
 def test(model_path='./models/model-100'):
 
-    test_captions = get_video_data(video_test_label_path)
+    # test_captions = get_video_data(video_test_label_path)
     
     test_videos = []
-    for video in test_captions:
-        test_videos.append(video['id'])
+    # for video in test_captions:
+    #     test_videos.append(video['id'])
+    f = open(video_id_path, 'r')
+    for line in f:
+        test_videos.append(line[:-1])
 
     _, __, w, i, b = createDict()
 
