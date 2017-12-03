@@ -59,7 +59,7 @@ class Agent_PG(Agent):
             reward_decay=0.99,
         )
 
-        batch_size = 16
+        batch_size = 2
 
         for i_episode in range(3000):
         
@@ -84,7 +84,11 @@ class Agent_PG(Agent):
                     if done:
                         break
         
-            ep_rs_sum = sum(self.RL.ep_rs)
+            ep_rs_sum = 0.0
+            for i in range(batch_size):
+                ep_rs_sum += sum(self.RL.ep_rs[i])
+
+            ep_rs_sum /= batch_size
         
             if 'running_reward' not in globals():
                 running_reward = ep_rs_sum

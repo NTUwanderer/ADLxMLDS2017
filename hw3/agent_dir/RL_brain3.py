@@ -166,28 +166,30 @@ class PolicyGradient:
         return actions
 
     def learn(self):
+        states = np.vstack([s for s in self.ep_obs if len(s) > 0])
+        actions = np.hstack(self.ep_as)
+        values = np.hstack(self.ep_vs)
         # discount and normalize episode reward
-        rewards = self._discount_multi_rewards(self.ep_rs)
+        rewards = self._discount_multi_rewards()
         rewards = np.hstack(rewards)
         rewards -= np.mean(rewards)
         rewards /= np.std(rewards) + self.epsilon
 
         advantages = rewards - values
         advantages -= np.mean(advantages)
-        advantages /= np.std(advantages) + FLAGS.epsilon
+        advantages /= np.std(advantages) + self.epsilon
 
         feed = {
-            self.states: ep_obs,
-            self.actions: ep_as,
-            self.rewards: ep_rs,
+            self.states: states,
+            self.actions: actions,
+            self.rewards: rewards,
             self.advantages: advantages
         }
 
-        _, summary_op, global_step = self.sess.run([self.train_op,
-                                               self.summary_op,
+        _, global_step = self.sess.run([self.train_op,
                                                tf.train.get_global_step()],
                                               feed_dict=feed)
-        self.summary_writer.add_summary(summary_op, global_step=global_step)
+        # self.summary_writer.add_summary(summary_op, global_step=global_step)
         
         self.ep_obs, self.ep_as, self.ep_rs, self.ep_vs = [], [], [], []
 
@@ -199,7 +201,7 @@ class PolicyGradient:
         for i in reversed(range(len(rewards))):
             if rewards[i] != 0:
                 running_add = 0
-            running_add = rewards[i] + gamma * running_add
+            running_add = rewards[i] + self.gamma * running_add
             discounted[i] = running_add
         return discounted
 
@@ -207,7 +209,7 @@ class PolicyGradient:
     def _discount_multi_rewards(self):
         # discount episode rewards
         discounted_ep_rs = []
-        for r in self.rewards:
+        for r in self.ep_rs:
             discounted_ep_rs.append(self._discount_rewards(r))
 
         return discounted_ep_rs
