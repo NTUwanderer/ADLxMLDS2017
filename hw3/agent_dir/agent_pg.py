@@ -1,5 +1,5 @@
 from agent_dir.agent import Agent
-from agent_dir.RL_brain import PolicyGradient
+from agent_dir.RL_brain2 import PolicyGradient
 import numpy as np
 
 class Agent_PG(Agent):
@@ -61,7 +61,7 @@ class Agent_PG(Agent):
 
         for i_episode in range(3000):
         
-            observation = np.reshape(self.env.reset(), [-1])
+            observation = self.env.reset()
             observation_ = observation
         
             while True:
@@ -70,7 +70,6 @@ class Agent_PG(Agent):
                 observation = observation_
 
                 observation_, reward, done, info = self.env.step(action)
-                observation_ = np.reshape(observation_, [-1])
         
                 self.RL.store_transition(observation, action, reward)
         
