@@ -94,6 +94,13 @@ class PolicyGradient:
         self.ep_as.append(a)
         self.ep_rs.append(r)
 
+    def checkActDist(self):
+        actions = np.zeros([self.n_actions])
+        for a in self.ep_as:
+            actions[a] += 1
+
+        return actions
+
     def learn(self):
         # discount and normalize episode reward
         discounted_ep_rs_norm = self._discount_and_norm_rewards()
@@ -112,13 +119,20 @@ class PolicyGradient:
         # discount episode rewards
         discounted_ep_rs = np.zeros_like(self.ep_rs)
         running_add = 0
+        prev_t = len(self.ep_rs)
         for t in reversed(range(0, len(self.ep_rs))):
+            if self.ep_rs[t] != 0.0 and t + 1 < prev_t:
+                running_add = 0
+                discounted_ep_rs[t + 1:prev_t] -= np.mean(discounted_ep_rs[t + 1:prev_t])
+                discounted_ep_rs[t + 1:prev_t] /= np.std( discounted_ep_rs[t + 1:prev_t])
+
+                prev_t = t
             running_add = running_add * self.gamma + self.ep_rs[t]
             discounted_ep_rs[t] = running_add
 
         # normalize episode rewards
-        discounted_ep_rs -= np.mean(discounted_ep_rs)
-        discounted_ep_rs /= np.std(discounted_ep_rs)
+        discounted_ep_rs[t + 1:prev_t] -= np.mean(discounted_ep_rs[t + 1:prev_t])
+        discounted_ep_rs[t + 1:prev_t] /= np.std( discounted_ep_rs[t + 1:prev_t])
         return discounted_ep_rs
 
     def save(self, path, gStep):

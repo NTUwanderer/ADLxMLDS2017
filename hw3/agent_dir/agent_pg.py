@@ -62,12 +62,15 @@ class Agent_PG(Agent):
         for i_episode in range(3000):
         
             observation = np.reshape(self.env.reset(), [-1])
+            observation_ = observation
         
             while True:
         
-                action = self.RL.choose_action(observation)
-        
+                action = self.RL.choose_action(observation_ - observation)
+                observation = observation_
+
                 observation_, reward, done, info = self.env.step(action)
+                observation_ = np.reshape(observation_, [-1])
         
                 self.RL.store_transition(observation, action, reward)
         
@@ -80,12 +83,12 @@ class Agent_PG(Agent):
                         running_reward = running_reward * 0.99 + ep_rs_sum * 0.01
 
                     print("episode:", i_episode, "  reward:", int(running_reward))
+                    print("actions: ", self.RL.checkActDist())
         
                     vt = self.RL.learn()
         
                     break
         
-                observation = np.reshape(observation_, [-1])
 
             if (i_episode + 1) % 30 == 0:
                 self.RL.save('models/model_pg', int((i_episode + 1) / 30 - 1))
