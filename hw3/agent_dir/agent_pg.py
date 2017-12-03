@@ -1,5 +1,5 @@
 from agent_dir.agent import Agent
-from agent_dir.RL_brain2 import PolicyGradient
+from agent_dir.RL_brain3 import PolicyGradient
 import numpy as np
 
 class Agent_PG(Agent):
@@ -59,35 +59,42 @@ class Agent_PG(Agent):
             reward_decay=0.99,
         )
 
+        batch_size = 16
+
         for i_episode in range(3000):
         
-            observation = self.env.reset()
-            observation_ = observation
-        
-            while True:
-        
-                action = self.RL.choose_action(observation_ - observation)
-                observation = observation_
+            for i in range(batch_size):
 
-                observation_, reward, done, info = self.env.step(action)
-        
-                self.RL.store_transition(observation, action, reward)
-        
-                if done:
-                    ep_rs_sum = sum(self.RL.ep_rs)
-        
-                    if 'running_reward' not in globals():
-                        running_reward = ep_rs_sum
-                    else:
-                        running_reward = running_reward * 0.99 + ep_rs_sum * 0.01
+                self.RL.add_episode()
 
-                    print("episode:", i_episode, "  reward:", int(running_reward))
-                    print("actions: ", self.RL.checkActDist())
+                observation = self.env.reset()
+                observation_ = observation
         
-                    vt = self.RL.learn()
+                while True:
         
-                    break
+                    actions, values = self.RL.get_actions_values([observation_ - observation])
+                    action = actions[0]
+                    value = values[0]
+                    observation = observation_
+
+                    observation_, reward, done, info = self.env.step(action)
         
+                    self.RL.store_transition(observation, action, reward, value)
+        
+                    if done:
+                        break
+        
+            ep_rs_sum = sum(self.RL.ep_rs)
+        
+            if 'running_reward' not in globals():
+                running_reward = ep_rs_sum
+            else:
+                running_reward = running_reward * 0.99 + ep_rs_sum * 0.01
+
+            print("episode:", i_episode, "  reward:", int(running_reward))
+            print("actions: ", self.RL.checkActDist())
+        
+            self.RL.learn()
 
             if (i_episode + 1) % 30 == 0:
                 self.RL.save('models/model_pg', int((i_episode + 1) / 30 - 1))
