@@ -54,6 +54,9 @@ class Agent_PG(Agent):
         if args.test_pg:
             #you can load your model here
             print('loading trained model')
+            self.RL.restore('models/model_pg-90')
+
+        else:
             self.RL.restore('models/model_pg-99')
 
         ##################
@@ -81,12 +84,6 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        self.RL = PolicyGradient(
-            n_actions=self.env.get_action_space().n,
-            n_features=[80, 80, 1],
-            learning_rate=0.02,
-            reward_decay=0.99,
-        )
 
         batch_size = 1
 
@@ -126,13 +123,13 @@ class Agent_PG(Agent):
             else:
                 running_reward = running_reward * 0.99 + ep_rs_sum * 0.01
 
-            print("episode:", i_episode, "  reward:", int(running_reward))
+            print("episode:", i_episode, "  reward:", int(running_reward), ",  current reward: ", ep_rs_sum)
             print("actions: ", self.RL.checkActDist())
         
             self.RL.learn()
 
             if (i_episode + 1) % 30 == 0:
-                self.RL.save('models/model_pg', int((i_episode + 1) / 30 - 1))
+                self.RL.save('models/model2_pg', int((i_episode + 1) / 30 - 1))
 
     def make_action(self, observation, test=True):
         """
@@ -149,5 +146,7 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        return self.env.get_random_action()
+        observation = pipeline(observation)
+        action = self.RL.get_actions([observation])[0]
+        return action
 
