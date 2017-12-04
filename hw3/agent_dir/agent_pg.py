@@ -1,6 +1,37 @@
 from agent_dir.agent import Agent
 from agent_dir.RL_brain3 import PolicyGradient
 import numpy as np
+from scipy.misc import imresize
+
+def kill_background_grayscale(image, bg):
+    H, W, _ = image.shape
+
+    R = image[..., 0]
+    G = image[..., 1]
+    B = image[..., 2]
+
+    cond = (R == bg[0]) & (G == bg[1]) & (B == bg[2])
+
+    image = np.zeros((H, W))
+    image[~cond] = 1
+
+    return image
+
+def resize_image(image, new_HW):
+    return imresize(image, new_HW, interp='nearest')
+
+def crop_ROI(image, height_range=(35, 193), width_range=(0, 160)):
+    h_beg, h_end = height_range
+    w_beg, w_end = width_range
+    return image[h_beg:h_end, w_beg:w_end, ...]
+
+def pipeline(image):
+    image = crop_ROI(image, (35, 193))
+    image = resize_image(image, (80, 80))
+    image = kill_background_grayscale(image, (144, 72, 17))
+    image = np.expand_dims(image, axis=2)
+
+    return image
 
 class Agent_PG(Agent):
     def __init__(self, env, args):
@@ -11,16 +42,23 @@ class Agent_PG(Agent):
 
         super(Agent_PG,self).__init__(env)
 
+        self.env = env
+        self.env.seed(1)
+
+        self.RL = PolicyGradient(
+            n_actions=self.env.get_action_space().n,
+            n_features=[80, 80, 1],
+            learning_rate=0.02,
+            reward_decay=0.99,
+        )
         if args.test_pg:
             #you can load your model here
             print('loading trained model')
+            self.RL.restore('models/model_pg-99')
 
         ##################
         # YOUR CODE HERE #
         ##################
-
-        self.env = env
-        self.env.seed(1)
 
 
     def init_game_setting(self):
@@ -33,16 +71,7 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        if not hasattr(self, 'RL'):
-        
-            self.RL = PolicyGradient(
-                n_actions=self.env.get_action_space().n,
-                n_features=self.env.get_observation_space().shape,
-                learning_rate=0.02,
-                reward_decay=0.99,
-            )
 
-            self.RL.restore('models/model_pg-0')
 
 
     def train(self):
@@ -54,12 +83,12 @@ class Agent_PG(Agent):
         ##################
         self.RL = PolicyGradient(
             n_actions=self.env.get_action_space().n,
-            n_features=self.env.get_observation_space().shape,
+            n_features=[80, 80, 1],
             learning_rate=0.02,
             reward_decay=0.99,
         )
 
-        batch_size = 2
+        batch_size = 1
 
         for i_episode in range(3000):
         
@@ -68,16 +97,18 @@ class Agent_PG(Agent):
                 self.RL.add_episode()
 
                 observation = self.env.reset()
+                observation = pipeline(observation)
                 observation_ = observation
-        
+
                 while True:
         
-                    actions, values = self.RL.get_actions_values([observation_ - observation])
+                    actions, values = self.RL.get_actions_values([observation_])
                     action = actions[0]
                     value = values[0]
                     observation = observation_
 
                     observation_, reward, done, info = self.env.step(action)
+                    observation_ = pipeline(observation_)
         
                     self.RL.store_transition(observation, action, reward, value)
         

@@ -51,6 +51,9 @@ class PolicyGradient:
 
         self.sess.run(tf.global_variables_initializer())
 
+    def __del(self):
+        del self.sess
+
     def _build_net(self):
         self.states = tf.placeholder(tf.float32, shape=[None, *self.n_features], name="states")
         self.actions = tf.placeholder(tf.uint8, shape=[None], name="actions")
@@ -160,8 +163,9 @@ class PolicyGradient:
 
     def checkActDist(self):
         actions = np.zeros([self.n_actions])
-        for a in self.ep_as:
-            actions[a] += 1
+        for act in self.ep_as:
+            for a in act:
+                actions[a] += 1
 
         return actions
 
