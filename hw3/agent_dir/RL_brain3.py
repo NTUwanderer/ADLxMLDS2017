@@ -111,13 +111,14 @@ class PolicyGradient:
             actions (1-D Array): Action Array of shape (N,)
         """
         feed = {
-            self.states: np.reshape(states, [-1, *self.input_shape])
+            self.states: np.reshape(states, [-1, *self.n_features])
         }
-        prob_weights = self.sess.run(self.all_act_prob, feed_dict={self.tf_obs: states[np.newaxis, :]})
-        action = np.random.choice(range(prob_weights.shape[1]), p=prob_weights.ravel())  # select action w.r.t the actions prob
-        return action
+        action_probs = self.sess.run(self.action_probs, feed)
+        noises = np.random.uniform(size=action_probs.shape[0])[:, np.newaxis]
 
-    def get_values(self, stats):
+        return (np.cumsum(action_probs, axis=1) > noises).argmax(axis=1)
+
+    def get_values(self, states):
         """Get values given states
         Args:
             states (4-D Array): States Array of shape (N, H, W, C)
@@ -126,7 +127,7 @@ class PolicyGradient:
             values (1-D Array): Values (N,)
         """
         feed = {
-            self.states: np.reshape(states, [-1, *self.input_shape])
+            self.states: np.reshape(states, [-1, *self.n_features])
         }
         return self.sess.run(self.values, feed).reshape(-1)
 

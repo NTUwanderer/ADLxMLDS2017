@@ -54,7 +54,7 @@ class Agent_PG(Agent):
         if args.test_pg:
             #you can load your model here
             print('loading trained model')
-            self.RL.restore('models/model_pg-90')
+            self.RL.restore('models/model_pg-99')
 
         else:
             self.RL.restore('models/model_pg-99')
