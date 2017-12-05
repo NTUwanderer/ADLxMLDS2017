@@ -77,7 +77,7 @@ class PolicyGradient:
         )
 
         with tf.name_scope('grad'):
-            neg_log_prob = -tf.log(tf.reshape(self.all_act_prob, [-1])) * self.tf_acts
+            neg_log_prob = -tf.log(tf.abs(tf.reshape(self.all_act_prob, [-1]) - self.tf_acts))
             loss = tf.reduce_mean(neg_log_prob * self.tf_vt)  # reward guided loss
 
         with tf.name_scope('train'):
@@ -118,7 +118,7 @@ class PolicyGradient:
         discounted_ep_rs = np.zeros_like(self.ep_rs)
         running_add = 0
         for t in reversed(range(0, len(self.ep_rs))):
-            if self.ep_rs[t] != 0.0 and t + 1 < prev_t:
+            if self.ep_rs[t] != 0.0:
                 running_add = 0
 
             running_add = running_add * self.gamma + self.ep_rs[t]

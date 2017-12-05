@@ -54,8 +54,7 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        if not hasattr(self, 'RL'):
-            pass
+        self.prev_state = None
         
 
 
@@ -81,7 +80,7 @@ class Agent_PG(Agent):
         
                 aprob = self.RL.choose_action(x)
                 action = 2 if np.random.uniform() < aprob else 3 # Choose between 2 and 3
-                y = 1 if action == 2 else -1 # fake label
+                y = 0 if action == 2 else 1 # fake label
 
                 observation, reward, done, info = self.env.step(action)
         
@@ -104,7 +103,7 @@ class Agent_PG(Agent):
         
 
             if (i_episode + 1) % 30 == 0:
-                self.RL.save('models/model_pg', int((i_episode + 1) / 30 - 1))
+                self.RL.save('models/model4_pg', int((i_episode + 1) / 30 - 1))
 
     def make_action(self, observation, test=True):
         """
@@ -121,5 +120,12 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        return self.env.get_random_action()
+        cur_x = prepro(observation)
+        x = cur_x - self.prev_state if self.prev_state is not None else np.zeros(D)
+        self.prev_state = cur_x
+
+        aprob = self.RL.choose_action(x)
+        action = 2 if np.random.uniform() < aprob else 3 # Choose between 2 and 3
+
+        return action
 
