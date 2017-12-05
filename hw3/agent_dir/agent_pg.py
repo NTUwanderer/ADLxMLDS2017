@@ -1,6 +1,17 @@
 from agent_dir.agent import Agent
-from agent_dir.RL_brain import PolicyGradient
+from agent_dir.RL_brain4 import PolicyGradient
 import numpy as np
+
+D = 80 * 80
+
+def prepro(I):
+    """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
+    I = I[35:195] # crop
+    I = I[::2,::2,0] # downsample by factor of 2
+    I[I == 144] = 0 # erase background (background type 1)
+    I[I == 109] = 0 # erase background (background type 2)
+    I[I != 0] = 1 # everything else (paddles, ball) just set to 1
+    return I.astype(np.float).ravel()
 
 class Agent_PG(Agent):
     def __init__(self, env, args):
@@ -11,9 +22,19 @@ class Agent_PG(Agent):
 
         super(Agent_PG,self).__init__(env)
 
+        print ("init")
+
+        self.RL = PolicyGradient(
+            n_actions=self.env.get_action_space().n,
+            n_features=D,
+            learning_rate=0.02,
+            reward_decay=0.99,
+        )
+
         if args.test_pg:
             #you can load your model here
             print('loading trained model')
+            self.RL.restore('models/model_pg-0')
 
         ##################
         # YOUR CODE HERE #
@@ -34,15 +55,8 @@ class Agent_PG(Agent):
         # YOUR CODE HERE #
         ##################
         if not hasattr(self, 'RL'):
+            pass
         
-            self.RL = PolicyGradient(
-                n_actions=self.env.get_action_space().n,
-                n_features=self.env.get_observation_space().shape,
-                learning_rate=0.02,
-                reward_decay=0.99,
-            )
-
-            self.RL.restore('models/model_pg-0')
 
 
     def train(self):
@@ -52,27 +66,26 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        self.RL = PolicyGradient(
-            n_actions=self.env.get_action_space().n,
-            n_features=self.env.get_observation_space().shape,
-            learning_rate=0.02,
-            reward_decay=0.99,
-        )
 
         for i_episode in range(3000):
         
-            observation = np.reshape(self.env.reset(), [-1])
-            observation_ = observation
+            prev_x = None
+            observation = self.env.reset()
         
             while True:
-        
-                action = self.RL.choose_action(observation_ - observation)
-                observation = observation_
 
-                observation_, reward, done, info = self.env.step(action)
-                observation_ = np.reshape(observation_, [-1])
+                cur_x = prepro(observation)
+
+                x = cur_x - prev_x if prev_x is not None else np.zeros(D)
+                prev_x = cur_x
         
-                self.RL.store_transition(observation, action, reward)
+                aprob = self.RL.choose_action(x)
+                action = 2 if np.random.uniform() < aprob else 3 # Choose between 2 and 3
+                y = 1 if action == 2 else -1 # fake label
+
+                observation, reward, done, info = self.env.step(action)
+        
+                self.RL.store_transition(x, y, reward)
         
                 if done:
                     ep_rs_sum = sum(self.RL.ep_rs)
