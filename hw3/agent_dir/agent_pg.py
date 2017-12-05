@@ -1,5 +1,5 @@
 from agent_dir.agent import Agent
-from agent_dir.RL_brain4 import PolicyGradient
+from agent_dir.RL_brain5 import PolicyGradient
 import numpy as np
 
 D = 80 * 80
@@ -78,13 +78,11 @@ class Agent_PG(Agent):
                 x = cur_x - prev_x if prev_x is not None else np.zeros(D)
                 prev_x = cur_x
         
-                aprob = self.RL.choose_action(x)
-                action = 2 if np.random.uniform() < aprob else 3 # Choose between 2 and 3
-                y = 0 if action == 2 else 1 # fake label
+                action = self.RL.choose_action(x)
 
                 observation, reward, done, info = self.env.step(action)
         
-                self.RL.store_transition(x, y, reward)
+                self.RL.store_transition(x, action, reward)
         
                 if done:
                     ep_rs_sum = sum(self.RL.ep_rs)
@@ -97,13 +95,14 @@ class Agent_PG(Agent):
                     print("episode:", i_episode, "  reward:", int(running_reward))
                     print("actions: ", self.RL.checkActDist())
         
-                    vt = self.RL.learn()
+                    if (i_episode + 1) % 5 == 0:
+                        self.RL.learn()
         
                     break
         
 
             if (i_episode + 1) % 30 == 0:
-                self.RL.save('models/model4_pg', int((i_episode + 1) / 30 - 1))
+                self.RL.save('models/model5_pg', int((i_episode + 1) / 30 - 1))
 
     def make_action(self, observation, test=True):
         """
@@ -124,8 +123,7 @@ class Agent_PG(Agent):
         x = cur_x - self.prev_state if self.prev_state is not None else np.zeros(D)
         self.prev_state = cur_x
 
-        aprob = self.RL.choose_action(x)
-        action = 2 if np.random.uniform() < aprob else 3 # Choose between 2 and 3
+        action = self.RL.choose_action(x)
 
         return action
 
