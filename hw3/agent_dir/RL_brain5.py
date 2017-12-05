@@ -28,12 +28,13 @@ class PolicyGradient:
             learning_rate=0.01,
             reward_decay=0.95,
             output_graph=False,
-            batch_size=16,
+            batch_size=1,
     ):
         self.n_actions = n_actions
         self.n_features = n_features
         self.learning_rate = learning_rate
         self.gamma = reward_decay
+        self.batch_size = batch_size
         self.epsilon = 1e-7
 
         self.ep_obs, self.ep_as, self.ep_rs = [], [], []
@@ -68,14 +69,23 @@ class PolicyGradient:
             bias_initializer=tf.constant_initializer(0.1),
             name='fc1'
         )
+        # fc1
+        layer2 = tf.layers.dense(
+            inputs=self.tf_obs,
+            units=200,
+            activation=tf.nn.selu,  # tanh activation
+            kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+            bias_initializer=tf.constant_initializer(0.1),
+            name='fc2'
+        )
         # fc2
         self.all_act = tf.layers.dense(
-            inputs=layer,
+            inputs=layer2,
             units=self.n_actions,
             activation=None,
             kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
             bias_initializer=tf.constant_initializer(0.1),
-            name='fc2'
+            name='fc_end'
         )
 
         self.all_act_prob = tf.nn.softmax(self.all_act, name='act_prob')  # use softmax to convert to probability
@@ -145,6 +155,7 @@ class PolicyGradient:
         # normalize episode rewards
         discounted_ep_rs -= np.mean(discounted_ep_rs)
         discounted_ep_rs /= np.std( discounted_ep_rs)
+
         return discounted_ep_rs
 
     def save(self, path, gStep):

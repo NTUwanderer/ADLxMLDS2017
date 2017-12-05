@@ -3,6 +3,7 @@ from agent_dir.RL_brain5 import PolicyGradient
 import numpy as np
 
 D = 80 * 80
+batch_size = 1
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
@@ -29,6 +30,7 @@ class Agent_PG(Agent):
             n_features=D,
             learning_rate=0.02,
             reward_decay=0.99,
+            batch_size=batch_size,
         )
 
         if args.test_pg:
@@ -65,8 +67,6 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-
-        batch_size = 1
 
         for i_episode in range(3000):
         
