@@ -66,6 +66,8 @@ class Agent_PG(Agent):
         # YOUR CODE HERE #
         ##################
 
+        batch_size = 1
+
         for i_episode in range(3000):
         
             prev_x = None
@@ -95,7 +97,7 @@ class Agent_PG(Agent):
                     print("episode:", i_episode, "  reward:", int(running_reward))
                     print("actions: ", self.RL.checkActDist())
         
-                    if (i_episode + 1) % 5 == 0:
+                    if (i_episode + 1) % batch_size == 0:
                         self.RL.learn()
         
                     break

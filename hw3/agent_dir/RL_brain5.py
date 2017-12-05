@@ -82,7 +82,7 @@ class PolicyGradient:
 
         with tf.name_scope('loss'):
             neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob + self.epsilon)*tf.one_hot(self.tf_acts, self.n_actions), axis=1)
-            loss = tf.reduce_mean(neg_log_prob * self.tf_vt)  # reward guided loss
+            loss = tf.reduce_sum(neg_log_prob * self.tf_vt)  # reward guided loss
 
         with tf.name_scope('train'):
             self.train_op = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
