@@ -3,7 +3,7 @@ from agent_dir.RL_brain5 import PolicyGradient
 import numpy as np
 
 D = 80 * 80
-batch_size = 1
+batch_size = 10
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
@@ -27,7 +27,7 @@ class Agent_PG(Agent):
 
         self.RL = PolicyGradient(
             n_actions=self.env.get_action_space().n,
-            n_features=D,
+            n_features=D * 2,
             learning_rate=0.02,
             reward_decay=0.99,
             batch_size=batch_size,
@@ -80,11 +80,12 @@ class Agent_PG(Agent):
                 x = cur_x - prev_x if prev_x is not None else np.zeros(D)
                 prev_x = cur_x
         
-                action = self.RL.choose_action(x)
+                state = np.concatenate((x, cur_x))
+                action = self.RL.choose_action(state)
 
                 observation, reward, done, info = self.env.step(action)
         
-                self.RL.store_transition(x, action, reward)
+                self.RL.store_transition(state, action, reward)
         
                 if done:
                     ep_rs_sum = sum(self.RL.ep_rs)

@@ -95,7 +95,7 @@ class PolicyGradient:
             loss = tf.reduce_sum(neg_log_prob * self.tf_vt)  # reward guided loss
 
         with tf.name_scope('train'):
-            self.train_op = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
+            self.train_op = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99).minimize(loss)
 
     def choose_action(self, x):
         prob_weights = self.sess.run(self.all_act_prob, feed_dict={self.tf_obs: x[np.newaxis, :]})
