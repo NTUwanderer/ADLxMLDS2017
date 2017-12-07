@@ -38,6 +38,8 @@ class PolicyGradient:
         self.epsilon = 1e-7
         self.decay=0.99
 
+        self.h = 200
+
         self.ep_obs, self.ep_as, self.ep_rs = [], [], []
         self.prob = [0.0] * self.n_actions
 
@@ -57,12 +59,20 @@ class PolicyGradient:
     def _build_net(self):
         with tf.name_scope('inputs'):
             self.tf_obs = tf.placeholder(tf.float32, [None, self.n_features], name="observations")
-            self.tf_acts = tf.placeholder(tf.int32, [None, self.n_actions], name="actions_num")
+            self.tf_acts = tf.placeholder(tf.float32, [None, self.n_actions], name="actions_num")
             self.tf_vt = tf.placeholder(tf.float32, [None, 1], name="actions_value")
         # fc1
+        tf_model = {}
+        with tf.variable_scope('layer_one',reuse=False):
+            xavier_l1 = tf.truncated_normal_initializer(mean=0, stddev=1./np.sqrt(self.n_features), dtype=tf.float32)
+            tf_model['W1'] = tf.get_variable("W1", [self.n_features, self.h], initializer=xavier_l1)
+        with tf.variable_scope('layer_two',reuse=False):
+            xavier_l2 = tf.truncated_normal_initializer(mean=0, stddev=1./np.sqrt(self.h), dtype=tf.float32)
+            tf_model['W2'] = tf.get_variable("W2", [self.h, self.n_actions], initializer=xavier_l2)
+        '''
         layer = tf.layers.dense(
             inputs=self.tf_obs,
-            units=200,
+            units=self.h,
             activation=tf.nn.relu,  # tanh activation
             kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
             bias_initializer=tf.constant_initializer(0.1),
@@ -76,8 +86,16 @@ class PolicyGradient:
             bias_initializer=tf.constant_initializer(0.1),
             name='fc_end'
         )
+        '''
+        def tf_policy_forward(x): #x ~ [1,D]
+            h = tf.matmul(x, tf_model['W1'])
+            h = tf.nn.relu(h)
+            logp = tf.matmul(h, tf_model['W2'])
+            p = tf.nn.softmax(logp)
+            return p
 
-        self.all_act_prob = tf.nn.softmax(self.all_act, name='act_prob')  # use softmax to convert to probability
+        self.all_act_prob = tf_policy_forward(self.tf_obs)
+        # self.all_act_prob = tf.nn.softmax(self.all_act, name='act_prob')  # use softmax to convert to probability
 
         def tf_discount_rewards(tf_r): #tf_r ~ [game_steps,1]
             discount_f = lambda a, v: a*self.gamma + v;
@@ -90,7 +108,7 @@ class PolicyGradient:
         tf_discounted_epr /= tf.sqrt(tf_variance + 1e-6)
 
         with tf.name_scope('loss'):
-            loss = tf.nn.l2_loss(tf.cast(self.tf_acts, tf.float32) - self.all_act_prob)
+            loss = tf.nn.l2_loss(self.tf_acts - self.all_act_prob)
 
         with tf.name_scope('train'):
             optimizer = tf.train.RMSPropOptimizer(self.learning_rate, decay=self.decay)
@@ -137,7 +155,7 @@ class PolicyGradient:
         # train on episode
         self.sess.run(self.train_op, feed_dict={
              self.tf_obs: np.vstack(self.ep_obs),  # shape=[None, n_obs]
-             self.tf_acts: np.array(self.ep_as),  # shape=[None, ]
+             self.tf_acts: self.ep_as.astype(float32),  # shape=[None, ]
              self.tf_vt: np.reshape(self.ep_rs, [-1, 1]),  # shape=[None, 1]
         })
 
