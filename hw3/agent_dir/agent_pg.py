@@ -51,42 +51,6 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-
-        self.env = env
-        self.env.seed(1)
-
-
-    def init_game_setting(self):
-        """
-
-        Testing function will call this function at the begining of new game
-        Put anything you want to initialize if necessary
-
-        """
-        ##################
-        # YOUR CODE HERE #
-        ##################
-        self.prev_state = None
-        
-
-
-    def train(self):
-        """
-        Implement your training algorithm here
-        """
-        ##################
-        # YOUR CODE HERE #
-        ##################
-        env = self.env
-
-        # gamespace 
-        observation = env.reset()
-        prev_x = None
-        xs,rs,ys = [],[],[]
-        running_reward = None
-        reward_sum = 0
-        episode_number = 0
-
         tf_model = {}
         with tf.variable_scope('layer_one',reuse=False):
             xavier_l1 = tf.truncated_normal_initializer(mean=0, stddev=1./np.sqrt(n_obs), dtype=tf.float32)
@@ -144,6 +108,54 @@ class Agent_PG(Agent):
             saver = tf.train.Saver(tf.all_variables())
             episode_number = int(load_path.split('-')[-1])
         
+        self.sess = sess
+        self.train_op = train_op
+        self.tf_x = tf_x
+        self.tf_y = tf_y
+        self.tf_epr = tf_epr
+        self.tf_aprob = tf_aprob
+
+        self.env = env
+        self.env.seed(1)
+
+
+    def init_game_setting(self):
+        """
+
+        Testing function will call this function at the begining of new game
+        Put anything you want to initialize if necessary
+
+        """
+        ##################
+        # YOUR CODE HERE #
+        ##################
+        self.prev_state = None
+        
+
+
+    def train(self):
+        """
+        Implement your training algorithm here
+        """
+        ##################
+        # YOUR CODE HERE #
+        ##################
+        env = self.env
+        sess = self.sess
+        train_op = self.train_op
+        tf_x = self.tf_x
+        tf_y = self.tf_y
+        tf_epr = self.tf_epr
+        tf_aprob = self.tf_aprob
+
+        # gamespace 
+        observation = env.reset()
+        prev_x = None
+        xs,rs,ys = [],[],[]
+        running_reward = None
+        reward_sum = 0
+        episode_number = 0
+
         
         # training loop
         while True:
@@ -218,11 +230,17 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
+        sess = self.sess
+        tf_aprob = self.tf_aprob
+        tf_x = self.tf_x
+
         cur_x = prepro(observation)
-        x = cur_x - self.prev_state if self.prev_state is not None else np.zeros(D)
+        x = cur_x - self.prev_state if self.prev_state is not None else np.zeros(n_obs)
         self.prev_state = cur_x
 
-        action = self.RL.choose_action(x)
+        feed = {tf_x: np.reshape(x, (1,-1))}
+        aprob = sess.run(tf_aprob,feed) ; aprob = aprob[0,:]
+        action = np.random.choice(n_actions, p=aprob)
 
-        return action
+        return action + 1
 
