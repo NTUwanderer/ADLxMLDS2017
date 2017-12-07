@@ -1,9 +1,9 @@
 from agent_dir.agent import Agent
-from agent_dir.RL_brain5 import PolicyGradient
+from agent_dir.RL_brain6 import PolicyGradient
 import numpy as np
 
 D = 80 * 80
-batch_size = 1
+batch_size = 10
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
@@ -22,8 +22,6 @@ class Agent_PG(Agent):
         """
 
         super(Agent_PG,self).__init__(env)
-
-        print ("init")
 
         self.RL = PolicyGradient(
             #n_actions=self.env.get_action_space().n,
@@ -106,7 +104,7 @@ class Agent_PG(Agent):
         
 
             if (i_episode + 1) % 50 == 0:
-                self.RL.save('models/model5_pg', int((i_episode + 1) / 30 - 1))
+                self.RL.save('models/model6_pg', int((i_episode + 1) / 30 - 1))
 
     def make_action(self, observation, test=True):
         """
