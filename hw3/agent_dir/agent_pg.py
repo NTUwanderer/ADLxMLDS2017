@@ -3,7 +3,7 @@ from agent_dir.RL_brain5 import PolicyGradient
 import numpy as np
 
 D = 80 * 80
-batch_size = 10
+batch_size = 1
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
@@ -26,7 +26,8 @@ class Agent_PG(Agent):
         print ("init")
 
         self.RL = PolicyGradient(
-            n_actions=self.env.get_action_space().n,
+            #n_actions=self.env.get_action_space().n,
+            n_actions=3,
             n_features=D * 2,
             learning_rate=0.02,
             reward_decay=0.99,
@@ -68,7 +69,7 @@ class Agent_PG(Agent):
         # YOUR CODE HERE #
         ##################
 
-        for i_episode in range(3000):
+        for i_episode in range(10000):
         
             prev_x = None
             observation = self.env.reset()
@@ -83,7 +84,7 @@ class Agent_PG(Agent):
                 state = np.concatenate((x, cur_x))
                 action = self.RL.choose_action(state)
 
-                observation, reward, done, info = self.env.step(action)
+                observation, reward, done, info = self.env.step(action + 1)
         
                 self.RL.store_transition(state, action, reward)
         
@@ -104,7 +105,7 @@ class Agent_PG(Agent):
                     break
         
 
-            if (i_episode + 1) % 30 == 0:
+            if (i_episode + 1) % 50 == 0:
                 self.RL.save('models/model5_pg', int((i_episode + 1) / 30 - 1))
 
     def make_action(self, observation, test=True):

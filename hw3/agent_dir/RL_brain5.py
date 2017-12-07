@@ -45,7 +45,7 @@ class PolicyGradient:
         self._build_net()
 
         self.sess = tf.Session()
-        self.saver = tf.train.Saver(max_to_keep=100)
+        self.saver = tf.train.Saver(max_to_keep=1000)
 
         if output_graph:
             # $ tensorboard --logdir=logs
@@ -59,17 +59,17 @@ class PolicyGradient:
         with tf.name_scope('inputs'):
             self.tf_obs = tf.placeholder(tf.float32, [None, self.n_features], name="observations")
             self.tf_acts = tf.placeholder(tf.int32, [None, ], name="actions_num")
-            self.tf_vt = tf.placeholder(tf.float32, [None, ], name="actions_value")
+            self.tf_vt = tf.placeholder(tf.float32, [None, 1], name="actions_value")
         # fc1
         layer = tf.layers.dense(
             inputs=self.tf_obs,
             units=200,
-            activation=tf.nn.selu,  # tanh activation
+            activation=tf.nn.relu,  # tanh activation
             kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
             bias_initializer=tf.constant_initializer(0.1),
             name='fc1'
         )
-        # fc1
+        '''
         layer2 = tf.layers.dense(
             inputs=self.tf_obs,
             units=200,
@@ -78,9 +78,9 @@ class PolicyGradient:
             bias_initializer=tf.constant_initializer(0.1),
             name='fc2'
         )
-        # fc2
+        '''
         self.all_act = tf.layers.dense(
-            inputs=layer2,
+            inputs=layer,
             units=self.n_actions,
             activation=None,
             kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
@@ -91,11 +91,14 @@ class PolicyGradient:
         self.all_act_prob = tf.nn.softmax(self.all_act, name='act_prob')  # use softmax to convert to probability
 
         with tf.name_scope('loss'):
-            neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob + self.epsilon)*tf.one_hot(self.tf_acts, self.n_actions), axis=1)
-            loss = tf.reduce_sum(neg_log_prob * self.tf_vt)  # reward guided loss
+            neg_log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.all_act, labels=self.tf_acts)   # this is negative log of chosen action
+            # neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob + self.epsilon)*tf.one_hot(self.tf_acts, self.n_actions), axis=1)
+            loss = tf.reduce_sum(neg_log_prob)  # reward guided loss
 
         with tf.name_scope('train'):
-            self.train_op = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99).minimize(loss)
+            optimizer = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99)
+            grads = optimizer.compute_gradients(loss, var_list=tf.trainable_variables(), grad_loss=self.tf_vt)
+            self.train_op = optimizer.apply_gradients(grads)
 
     def choose_action(self, x):
         prob_weights = self.sess.run(self.all_act_prob, feed_dict={self.tf_obs: x[np.newaxis, :]})
@@ -130,12 +133,13 @@ class PolicyGradient:
     def learn(self):
         # discount and normalize episode reward
         discounted_ep_rs_norm = self._discount_and_norm_rewards()
+        print ('shapes: ', np.vstack(self.ep_obs).shape, np.array(self.ep_as).shape, discounted_ep_rs_norm.shape)
 
         # train on episode
         self.sess.run(self.train_op, feed_dict={
              self.tf_obs: np.vstack(self.ep_obs),  # shape=[None, n_obs]
              self.tf_acts: np.array(self.ep_as),  # shape=[None, ]
-             self.tf_vt: discounted_ep_rs_norm,  # shape=[None, ]
+             self.tf_vt: np.reshape(discounted_ep_rs_norm, [-1, 1]),  # shape=[None, 1]
         })
 
         self.ep_obs, self.ep_as, self.ep_rs = [], [], []    # empty episode data
