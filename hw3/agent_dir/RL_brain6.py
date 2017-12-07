@@ -155,7 +155,7 @@ class PolicyGradient:
         # train on episode
         self.sess.run(self.train_op, feed_dict={
              self.tf_obs: np.vstack(self.ep_obs),  # shape=[None, n_obs]
-             self.tf_acts: self.ep_as.astype(float32),  # shape=[None, ]
+             self.tf_acts: np.array(self.ep_as, dtype=np.float32),  # shape=[None, ]
              self.tf_vt: np.reshape(self.ep_rs, [-1, 1]),  # shape=[None, 1]
         })
 
