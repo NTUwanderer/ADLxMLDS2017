@@ -53,7 +53,7 @@ class Agent_PG(Agent):
         tf_model = {}
         with tf.variable_scope('layer_one',reuse=False):
             xavier_l1 = tf.truncated_normal_initializer(mean=0, stddev=1./np.sqrt(n_obs), dtype=tf.float32)
-            tf_model['W1'] = tf.get_variable("W1", [n_obs, h], initializer=xavier_l1)
+            tf_model['W1'] = tf.get_variable("W1", [n_obs * 2, h], initializer=xavier_l1)
         with tf.variable_scope('layer_two',reuse=False):
             xavier_l2 = tf.truncated_normal_initializer(mean=0, stddev=1./np.sqrt(h), dtype=tf.float32)
             tf_model['W2'] = tf.get_variable("W2", [h,n_actions], initializer=xavier_l2)
@@ -76,7 +76,7 @@ class Agent_PG(Agent):
             return I.astype(np.float).ravel()
         
         # tf placeholders
-        tf_x = tf.placeholder(dtype=tf.float32, shape=[None, n_obs],name="tf_x")
+        tf_x = tf.placeholder(dtype=tf.float32, shape=[None, n_obs * 2],name="tf_x")
         tf_y = tf.placeholder(dtype=tf.float32, shape=[None, n_actions],name="tf_y")
         tf_epr = tf.placeholder(dtype=tf.float32, shape=[None,1], name="tf_epr")
         
@@ -92,19 +92,19 @@ class Agent_PG(Agent):
         tf.initialize_all_variables().run()
         
         # try load saved model
-        saver = tf.train.Saver(tf.all_variables())
+        self.saver = tf.train.Saver(tf.all_variables())
         load_was_success = True # yes, I'm being optimistic
         try:
             save_dir = '/'.join(save_path.split('/')[:-1])
             ckpt = tf.train.get_checkpoint_state(save_dir)
             load_path = ckpt.model_checkpoint_path
-            saver.restore(sess, load_path)
+            self.saver.restore(sess, load_path)
         except:
             print ("no saved model to load. starting new session")
             load_was_success = False
         else:
             print ("loaded model: {}".format(load_path))
-            saver = tf.train.Saver(tf.all_variables())
+            self.saver = tf.train.Saver(tf.all_variables())
             episode_number = int(load_path.split('-')[-1])
         
         self.sess = sess
@@ -155,6 +155,9 @@ class Agent_PG(Agent):
         reward_sum = 0
         episode_number = 0
 
+        record_rewards = []
+
+        record_file = open('pg_record', 'w', 1000)
         
         # training loop
         while True:
@@ -166,7 +169,7 @@ class Agent_PG(Agent):
             prev_x = cur_x
         
             # stochastically sample a policy from the network
-            feed = {tf_x: np.reshape(x, (1,-1))}
+            feed = {tf_x: np.reshape(np.stack((x, cur_x)), (1,-1))}
             aprob = sess.run(tf_aprob,feed) ; aprob = aprob[0,:]
             action = np.random.choice(n_actions, p=aprob)
             label = np.zeros_like(aprob) ; label[action] = 1
@@ -176,11 +179,15 @@ class Agent_PG(Agent):
             reward_sum += reward
             
             # record game history
-            xs.append(x) ; ys.append(label) ; rs.append(reward)
+            xs.append(np.reshape(np.stack((x, cur_x)), (1, -1))) ; ys.append(label) ; rs.append(reward)
             
             if done:
                 # update running reward
                 running_reward = reward_sum if running_reward is None else running_reward * 0.99 + reward_sum * 0.01
+                if len(record_rewards) == 30:
+                    record_rewards = record_rewards[1:]
+
+                record_rewards.append(reward_sum)
                 
                 temp_rs = np.vstack(rs)
                 discounted = np.zeros_like(temp_rs)
@@ -201,7 +208,10 @@ class Agent_PG(Agent):
                 
                 # print progress console
                 if episode_number % 10 == 0:
-                    print ('ep {}: reward: {}, mean reward: {:3f}'.format(episode_number, reward_sum, running_reward))
+                    mean_r = sum(record_rewards) / float(len(record_rewards))
+                    print ('ep {}: reward: {}, mean reward: {:3f}'.format(episode_number, reward_sum, mean_r))
+                    record_file.write('{}, {:3f}\n'.format(episode_number, mean_r))
+                    #print ('ep {}: reward: {}, mean reward: {:3f}'.format(episode_number, reward_sum, running_reward))
                 else:
                     print ('\tep {}: reward: {}'.format(episode_number, reward_sum))
                 
@@ -211,7 +221,7 @@ class Agent_PG(Agent):
                 observation = env.reset() # reset env
                 reward_sum = 0
                 if episode_number % 50 == 0:
-                    saver.save(sess, save_path, global_step=episode_number)
+                    self.saver.save(sess, save_path, global_step=episode_number)
                     print ("SAVED MODEL #{}".format(episode_number))
 
     def make_action(self, observation, test=True):
@@ -237,7 +247,7 @@ class Agent_PG(Agent):
         x = cur_x - self.prev_state if self.prev_state is not None else np.zeros(n_obs)
         self.prev_state = cur_x
 
-        feed = {tf_x: np.reshape(x, (1,-1))}
+        feed = {tf_x: np.reshape(np.stack((x, cur_x)), (1,-1))}
         aprob = sess.run(tf_aprob,feed) ; aprob = aprob[0,:]
         action = np.random.choice(n_actions, p=aprob)
 
