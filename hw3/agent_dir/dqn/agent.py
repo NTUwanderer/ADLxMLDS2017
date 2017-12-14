@@ -32,6 +32,10 @@ class Agent(BaseModel):
         self.build_dqn()
 
     def train(self):
+        record_file = open('dqn_record', 'w', 100)
+        record_rewards = []
+        myStep = 0
+
         start_step = self.step_op.eval()
         start_time = time.time()
 
@@ -41,7 +45,6 @@ class Agent(BaseModel):
         ep_rewards, actions = [], []
 
         screen = self.env.reset()
-        print ('screen.shape: ', screen.shape)
 
         for _ in range(self.history_length):
             self.history.add(screen)
@@ -60,10 +63,21 @@ class Agent(BaseModel):
             self.observe(screen, reward, action, terminal)
 
             if terminal:
+                myStep += 1
                 screen = self.env.reset()
 
                 num_game += 1
                 ep_rewards.append(ep_reward)
+
+                if len(record_rewards) == 30:
+                    record_rewards = record_rewards[1:]
+
+                record_rewards.append(ep_reward)
+
+                if myStep % 10 == 0:
+                    mean_r = sum(record_rewards) / float(len(record_rewards))
+                    record_file.write('{}, {:3f}\n'.format(myStep, mean_r))
+
                 ep_reward = 0.
             else:
                 ep_reward += reward
@@ -115,6 +129,8 @@ class Agent(BaseModel):
                     ep_reward = 0.
                     ep_rewards = []
                     actions = []
+
+        record_file.close()
 
     def predict(self, s_t, test_ep=None):
         ep = test_ep or (self.ep_end +
