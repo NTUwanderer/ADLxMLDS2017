@@ -166,7 +166,16 @@ class DQN:
         '''
         Load pretrained model from file.
         '''
-        self.saver.restore(self.sess, model_path)
+        try:
+            save_dir = '/'.join(model_path.split('/')[:-1])
+            ckpt = tf.train.get_checkpoint_state(save_dir)
+            load_path = ckpt.model_checkpoint_path
+            self.saver.restore(self.sess, load_path)
+        except:
+            print ("no saved model to load. starting new session")
+        else:
+            print ("loaded model: {}".format(load_path))
+            
 
 class DoubleDQN(DQN):
 
