@@ -11,8 +11,10 @@ n_actions = 3             # number of available actions
 learning_rate = 1e-3
 gamma = .99               # discount factor for reward
 decay = 0.99              # decay rate for RMSProp gradients
-save_path='pg_models/pong.ckpt'
+save_path='new_pg_models/pong.ckpt'
 
+np.random.seed(1)
+tf.set_random_seed(1)
 
 def prepro(I):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
