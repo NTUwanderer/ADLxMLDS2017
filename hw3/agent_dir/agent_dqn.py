@@ -15,14 +15,14 @@ class Agent_DQN(Agent):
         """
 
         super(Agent_DQN,self).__init__(env)
-        self.DQN = DuelingDQN(env, args.test_dqn)
+        self.DQN = DQN(env, args.test_dqn)
         # self.resume = args.resume
         self.resume = False
         self.args = args
 
         if args.test_dqn:
-            self.DQN.load_model('model_dldqn/model.ckpt-3800')
             print('loading trained model')
+            self.DQN.load_model(tf.train.latest_checkpoint('model_dqn'))
 
         ##################
         # YOUR CODE HERE #
@@ -54,10 +54,10 @@ class Agent_DQN(Agent):
         episode_count = 0
         episode_reward = 0
         learn_freq = 4
-        f = open('train_dldqn.csv', 'w')
+        f = open('train_dqn.csv', 'a')
         if self.resume:
             step_count, frame_count, learn_count, episode_count, episode_reward, self.DQN.memory_count, self.DQN.learn_step_count, self.DQN.epsilon = np.load('model_dqn/record.npy')
-            self.DQN.load_model(tf.train.latest_checkpoint('model_dldqn'))
+            self.DQN.load_model(tf.train.latest_checkpoint('model_dqn'))
         else:
             print('episode,reward', file=f)
         t_start = time.time()
@@ -93,8 +93,8 @@ class Agent_DQN(Agent):
                 step_count, self.DQN.epsilon, t_elapsed // 3600, t_elapsed % 3600 // 60, t_elapsed % 60, learn_count))
 
             if (step_count > 100000) and (step_count % 100000 == 0):
-                self.DQN.save_model('model_dldqn/model.ckpt', int(step_count/1000))
-                np.save('model_dldqn/record.npy', [step_count, frame_count, learn_count, episode_count, episode_reward, self.DQN.memory_count, self.DQN.learn_step_count, self.DQN.epsilon])
+                self.DQN.save_model('model_dqn/model.ckpt', int(step_count/1000))
+                np.save('model_dqn/record.npy', [step_count, frame_count, learn_count, episode_count, episode_reward, self.DQN.memory_count, self.DQN.learn_step_count, self.DQN.epsilon])
                 if (step_count > 2000000) and (step_count % 500000 == 0):
                     test_env = Environment('BreakoutNoFrameskip-v4', self.args, atari_wrapper=True, test=True)
                     test_score = test(self, test_env, 100)
