@@ -6,12 +6,15 @@ from glob import glob
 import tensorflow as tf
 import numpy as np
 
+from skimage.transform import resize
+from skimage.io import imread
+
 from skip_thoughts import configuration
 from skip_thoughts import encoder_manager
 
 from ops import *
 from utils import *
-from Utils import ops
+# from Utils import ops
 
 def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
@@ -19,7 +22,7 @@ def conv_out_size_same(size, stride):
 class DCGAN(object):
     def __init__(self, sess, input_height=64, input_width=64, crop=False,
                  batch_size=64, sample_num = 64, output_height=64, output_width=64,
-                 y_dim=2400, z_dim=100, gf_dim=64, df_dim=64,
+                 y_dim=2400, ry_dim=128, z_dim=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='anime',
                  input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None, data_dir=None):
         """
@@ -47,6 +50,7 @@ class DCGAN(object):
         self.output_width = output_width
 
         self.y_dim = y_dim
+        self.ry_dim = ry_dim
         self.z_dim = z_dim
 
         self.gf_dim = gf_dim
@@ -55,9 +59,13 @@ class DCGAN(object):
         self.gfc_dim = gfc_dim
         self.dfc_dim = dfc_dim
 
+        self.dataset_name = dataset_name
+        self.input_fname_pattern = input_fname_pattern
+        self.checkpoint_dir = checkpoint_dir
         self.data_dir = data_dir
 
         # batch normalization : deals with poor initialization helps gradient flow
+        """
         self.d_bn1 = batch_norm(name='d_bn1')
         self.d_bn2 = batch_norm(name='d_bn2')
 
@@ -74,6 +82,7 @@ class DCGAN(object):
         self.dataset_name = dataset_name
         self.input_fname_pattern = input_fname_pattern
         self.checkpoint_dir = checkpoint_dir
+        """
 
         if self.dataset_name == 'anime':
             self.images, self.tags = self.load_anime()
@@ -93,23 +102,20 @@ class DCGAN(object):
 
         self.grayscale = (self.c_dim == 1)
 
-        self.g_bn0 = ops.batch_norm(name='g_bn0')
-        self.g_bn1 = ops.batch_norm(name='g_bn1')
-        self.g_bn2 = ops.batch_norm(name='g_bn2')
-        self.g_bn3 = ops.batch_norm(name='g_bn3')
+        self.g_bn0 = batch_norm(name='g_bn0')
+        self.g_bn1 = batch_norm(name='g_bn1')
+        self.g_bn2 = batch_norm(name='g_bn2')
+        self.g_bn3 = batch_norm(name='g_bn3')
         
-        self.d_bn1 = ops.batch_norm(name='d_bn1')
-        self.d_bn2 = ops.batch_norm(name='d_bn2')
-        self.d_bn3 = ops.batch_norm(name='d_bn3')
-        self.d_bn4 = ops.batch_norm(name='d_bn4')
+        self.d_bn1 = batch_norm(name='d_bn1')
+        self.d_bn2 = batch_norm(name='d_bn2')
+        self.d_bn3 = batch_norm(name='d_bn3')
+        self.d_bn4 = batch_norm(name='d_bn4')
 
         self.build_model()
 
     def build_model(self):
-        if self.y_dim:
-            self.y = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
-        else:
-            self.y = None
+        self.y = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
 
         if self.crop:
             image_dims = [self.output_height, self.output_width, self.c_dim]
@@ -163,10 +169,10 @@ class DCGAN(object):
         self.saver = tf.train.Saver()
 
     def train(self, config):
-        # d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-        #                     .minimize(self.d_loss, var_list=self.d_vars)
-        # g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-        #                     .minimize(self.g_loss, var_list=self.g_vars)
+        d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+                            .minimize(self.d_loss, var_list=self.d_vars)
+        g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+                            .minimize(self.g_loss, var_list=self.g_vars)
         try:
             tf.global_variables_initializer().run()
         except:
@@ -181,17 +187,8 @@ class DCGAN(object):
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num , self.z_dim))
 
         if config.dataset == 'anime':
-            sample_files = self.tags[:self.sample_num]
-            sample = [
-                    get_image(os.path.join(self.data_dir, 'faces', tag[0] + '.jpg'),
-                                input_height=self.input_height,
-                                input_width=self.input_width,
-                                resize_height=self.output_height,
-                                resize_width=self.output_width,
-                                crop=self.crop,
-                                grayscale=self.grayscale) for tag in sample_files]
-
-
+            sample_inputs = self.images[:self.sample_num]
+            sample_labels = self.tags[:self.sample_num]
         
         """
         if config.dataset == 'mnist':
@@ -223,36 +220,22 @@ class DCGAN(object):
             print(" [!] Load failed...")
 
         for epoch in range(config.epoch):
-            if config.dataset == 'mnist':
-                batch_idxs = min(len(self.data_X), config.train_size) // config.batch_size
-            else:            
-                self.data = glob(os.path.join(
-                    "./data", config.dataset, self.input_fname_pattern))
-                batch_idxs = min(len(self.data), config.train_size) // config.batch_size
+            if config.dataset == 'anime':
+                batch_idxs = min(len(self.images), config.train_size) // config.batch_size
 
+            random_order = np.arange(len(self.images))
+            np.random.shuffle(random_order)
+            
             for idx in range(0, batch_idxs):
-                if config.dataset == 'mnist':
-                    batch_images = self.data_X[idx*config.batch_size:(idx+1)*config.batch_size]
-                    batch_labels = self.data_y[idx*config.batch_size:(idx+1)*config.batch_size]
-                else:
-                    batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
-                    batch = [
-                            get_image(batch_file,
-                                                input_height=self.input_height,
-                                                input_width=self.input_width,
-                                                resize_height=self.output_height,
-                                                resize_width=self.output_width,
-                                                crop=self.crop,
-                                                grayscale=self.grayscale) for batch_file in batch_files]
-                    if self.grayscale:
-                        batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
-                    else:
-                        batch_images = np.array(batch).astype(np.float32)
-
+                if config.dataset == 'anime':
+                    indices = random_order[idx*config.batch_size:(idx+1)*config.batch_size]
+                    batch_images = self.images[indices]
+                    batch_labels = self.tags[indices]
+                    
                 batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
                             .astype(np.float32)
 
-                if config.dataset == 'mnist':
+                if config.dataset == 'anime':
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
                         feed_dict={ 
@@ -287,34 +270,14 @@ class DCGAN(object):
                             self.z: batch_z,
                             self.y: batch_labels
                     })
-                else:
-                    # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                        feed_dict={ self.inputs: batch_images, self.z: batch_z })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                        feed_dict={ self.z: batch_z })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                        feed_dict={ self.z: batch_z })
-                    self.writer.add_summary(summary_str, counter)
-                    
-                    errD_fake = self.d_loss_fake.eval({ self.z: batch_z })
-                    errD_real = self.d_loss_real.eval({ self.inputs: batch_images })
-                    errG = self.g_loss.eval({self.z: batch_z})
 
                 counter += 1
                 print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                     % (epoch, idx, batch_idxs,
                         time.time() - start_time, errD_fake+errD_real, errG))
 
-                """
                 if np.mod(counter, 100) == 1:
-                    if config.dataset == 'mnist':
+                    if config.dataset == 'anime':
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
@@ -326,21 +289,6 @@ class DCGAN(object):
                         save_images(samples, image_manifold_size(samples.shape[0]),
                                     './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
                         print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
-                    else:
-                        try:
-                            samples, d_loss, g_loss = self.sess.run(
-                                [self.sampler, self.d_loss, self.g_loss],
-                                feed_dict={
-                                        self.z: sample_z,
-                                        self.inputs: sample_inputs,
-                                },
-                            )
-                            save_images(samples, image_manifold_size(samples.shape[0]),
-                                        './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
-                            print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
-                        except:
-                            print("one pic error!...")
-                """
 
                 if np.mod(counter, 500) == 2:
                     self.save(config.checkpoint_dir, counter)
@@ -350,45 +298,45 @@ class DCGAN(object):
             if reuse:
                 scope.reuse_variables()
 
-                h0 = ops.lrelu(ops.conv2d(image, self.df_dim, name = 'd_h0_conv')) #32
-                h1 = ops.lrelu( self.d_bn1(ops.conv2d(h0, self.df_dim*2, name = 'd_h1_conv'))) #16
-                h2 = ops.lrelu( self.d_bn2(ops.conv2d(h1, self.df_dim*4, name = 'd_h2_conv'))) #8
-                h3 = ops.lrelu( self.d_bn3(ops.conv2d(h2, self.df_dim*8, name = 'd_h3_conv'))) #4
-                
-                # ADD TEXT EMBEDDING TO THE NETWORK
-                reduced_text_embeddings = ops.lrelu(ops.linear(t_text_embedding, self.y_dim, 'd_embedding'))
-                reduced_text_embeddings = tf.expand_dims(reduced_text_embeddings,1)
-                reduced_text_embeddings = tf.expand_dims(reduced_text_embeddings,2)
-                tiled_embeddings = tf.tile(reduced_text_embeddings, [1,4,4,1], name='tiled_embeddings')
-                
-                h3_concat = tf.concat( [h3, tiled_embeddings], 3, name='h3_concat')
-                h3_new = ops.lrelu( self.d_bn4(ops.conv2d(h3_concat, self.df_dim*8, 1,1,1,1, name = 'd_h3_conv_new'))) #4
-                
-                h4 = ops.linear(tf.reshape(h3_new, [self.batch_size, -1]), 1, 'd_h3_lin')
-                
-                return tf.nn.sigmoid(h4), h4
+            h0 = lrelu(conv2d(image, self.df_dim, name = 'd_h0_conv')) #32
+            h1 = lrelu( self.d_bn1(conv2d(h0, self.df_dim*2, name = 'd_h1_conv'))) #16
+            h2 = lrelu( self.d_bn2(conv2d(h1, self.df_dim*4, name = 'd_h2_conv'))) #8
+            h3 = lrelu( self.d_bn3(conv2d(h2, self.df_dim*8, name = 'd_h3_conv'))) #4
+            
+            # ADD TEXT EMBEDDING TO THE NETWORK
+            reduced_text_embeddings = lrelu(linear(y, self.ry_dim, 'd_embedding'))
+            reduced_text_embeddings = tf.expand_dims(reduced_text_embeddings,1)
+            reduced_text_embeddings = tf.expand_dims(reduced_text_embeddings,2)
+            tiled_embeddings = tf.tile(reduced_text_embeddings, [1,4,4,1], name='tiled_embeddings')
+            
+            h3_concat = tf.concat( [h3, tiled_embeddings], 3, name='h3_concat')
+            h3_new = lrelu( self.d_bn4(conv2d(h3_concat, self.df_dim*8, 1,1,1,1, name = 'd_h3_conv_new'))) #4
+            
+            h4 = linear(tf.reshape(h3_new, [self.batch_size, -1]), 1, 'd_h3_lin')
+            
+            return tf.nn.sigmoid(h4), h4
 
     def generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
             s = self.output_height
             s2, s4, s8, s16 = int(s/2), int(s/4), int(s/8), int(s/16)
             
-            reduced_text_embedding = ops.lrelu( ops.linear(y, self.y_dim, 'g_embedding') )
+            reduced_text_embedding = lrelu( linear(y, self.ry_dim, 'g_embedding') )
             z_concat = tf.concat([z, reduced_text_embedding], 1)
-            z_ = ops.linear(z_concat, self.gf_dim*8*s16*s16, 'g_h0_lin')
+            z_ = linear(z_concat, self.gf_dim*8*s16*s16, 'g_h0_lin')
             h0 = tf.reshape(z_, [-1, s16, s16, self.gf_dim * 8])
             h0 = tf.nn.relu(self.g_bn0(h0))
             
-            h1 = ops.deconv2d(h0, [self.batch_size, s8, s8, self.gf_dim*4], name='g_h1')
+            h1 = deconv2d(h0, [self.batch_size, s8, s8, self.gf_dim*4], name='g_h1')
             h1 = tf.nn.relu(self.g_bn1(h1))
             
-            h2 = ops.deconv2d(h1, [self.batch_size, s4, s4, self.gf_dim*2], name='g_h2')
+            h2 = deconv2d(h1, [self.batch_size, s4, s4, self.gf_dim*2], name='g_h2')
             h2 = tf.nn.relu(self.g_bn2(h2))
             
-            h3 = ops.deconv2d(h2, [self.batch_size, s2, s2, self.gf_dim*1], name='g_h3')
+            h3 = deconv2d(h2, [self.batch_size, s2, s2, self.gf_dim*1], name='g_h3')
             h3 = tf.nn.relu(self.g_bn3(h3))
             
-            h4 = ops.deconv2d(h3, [self.batch_size, s, s, 3], name='g_h4')
+            h4 = deconv2d(h3, [self.batch_size, s, s, 3], name='g_h4')
             
             return (tf.tanh(h4)/2. + 0.5)
 
@@ -399,22 +347,22 @@ class DCGAN(object):
             s = self.output_height
             s2, s4, s8, s16 = int(s/2), int(s/4), int(s/8), int(s/16)
             
-            reduced_text_embedding = ops.lrelu( ops.linear(t_text_embedding, self.y_dim, 'g_embedding') )
+            reduced_text_embedding = lrelu( linear(y, self.ry_dim, 'g_embedding') )
             z_concat = tf.concat([z, reduced_text_embedding], 1)
-            z_ = ops.linear(z_concat, self.gf_dim*8*s16*s16, 'g_h0_lin')
+            z_ = linear(z_concat, self.gf_dim*8*s16*s16, 'g_h0_lin')
             h0 = tf.reshape(z_, [-1, s16, s16, self.gf_dim * 8])
             h0 = tf.nn.relu(self.g_bn0(h0, train = False))
             
-            h1 = ops.deconv2d(h0, [self.batch_size, s8, s8, self.gf_dim*4], name='g_h1')
+            h1 = deconv2d(h0, [self.batch_size, s8, s8, self.gf_dim*4], name='g_h1')
             h1 = tf.nn.relu(self.g_bn1(h1, train = False))
             
-            h2 = ops.deconv2d(h1, [self.batch_size, s4, s4, self.gf_dim*2], name='g_h2')
+            h2 = deconv2d(h1, [self.batch_size, s4, s4, self.gf_dim*2], name='g_h2')
             h2 = tf.nn.relu(self.g_bn2(h2, train = False))
             
-            h3 = ops.deconv2d(h2, [self.batch_size, s2, s2, self.gf_dim*1], name='g_h3')
+            h3 = deconv2d(h2, [self.batch_size, s2, s2, self.gf_dim*1], name='g_h3')
             h3 = tf.nn.relu(self.g_bn3(h3, train = False))
             
-            h4 = ops.deconv2d(h3, [self.batch_size, s, s, 3], name='g_h4')
+            h4 = deconv2d(h3, [self.batch_size, s, s, 3], name='g_h4')
 		
             return (tf.tanh(h4)/2. + 0.5)
 
@@ -434,6 +382,8 @@ class DCGAN(object):
         del self.encoder
 
     def load_anime(self):
+        print ('loading anime images & skip thoughts...')
+
         images = []
         tags = []
 
@@ -452,13 +402,8 @@ class DCGAN(object):
                 index = splits[0]
                 tag = splits[1]
 
-                image = get_image(os.path.join(self.data_dir, 'faces', index + '.jpg'),
-                            input_height=self.input_height,
-                            input_width=self.input_width,
-                            resize_height=self.output_height,
-                            resize_width=self.output_width,
-                            crop=self.crop,
-                            grayscale=False)
+                image = imread(os.path.join(self.data_dir, 'faces', index + '.jpg'))
+                image = resize(image, (self.output_height, self.output_width))
                 images.append(image)
 
                 # tags.append(self.encoder.encode([tag])[0])
@@ -468,6 +413,8 @@ class DCGAN(object):
 
         self.del_skip_thought()
         images = np.array(images)
+        
+        print ('Finish loading')
 
         return images, tags
 

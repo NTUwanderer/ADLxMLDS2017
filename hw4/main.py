@@ -46,7 +46,6 @@ def main(_):
     run_config = tf.ConfigProto()
     run_config.gpu_options.allow_growth=True
 
-    print ('dataset: ', FLAGS.dataset)
     with tf.Session(config=run_config) as sess:
         if FLAGS.dataset == 'anime':
             dcgan = DCGAN(
@@ -57,7 +56,7 @@ def main(_):
                     output_height=FLAGS.output_height,
                     batch_size=FLAGS.batch_size,
                     sample_num=FLAGS.batch_size,
-                    y_dim=100,
+                    y_dim=2400,
                     z_dim=FLAGS.generate_test_images,
                     dataset_name=FLAGS.dataset,
                     input_fname_pattern=FLAGS.input_fname_pattern,
