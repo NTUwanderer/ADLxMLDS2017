@@ -6,6 +6,9 @@ from glob import glob
 import tensorflow as tf
 import numpy as np
 
+from skip_thoughts import configuration
+from skip_thoughts import encoder_manager
+
 from ops import *
 from utils import *
 
@@ -13,11 +16,11 @@ def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
 
 class DCGAN(object):
-    def __init__(self, sess, input_height=108, input_width=108, crop=True,
+    def __init__(self, sess, input_height=64, input_width=64, crop=False,
                  batch_size=64, sample_num = 64, output_height=64, output_width=64,
-                 y_dim=None, z_dim=100, gf_dim=64, df_dim=64,
-                 gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='default',
-                 input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None):
+                 y_dim=2400, z_dim=100, gf_dim=64, df_dim=64,
+                 gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='anime',
+                 input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None, data_dir=None):
         """
 
         Args:
@@ -51,6 +54,8 @@ class DCGAN(object):
         self.gfc_dim = gfc_dim
         self.dfc_dim = dfc_dim
 
+        self.data_dir = data_dir
+
         # batch normalization : deals with poor initialization helps gradient flow
         self.d_bn1 = batch_norm(name='d_bn1')
         self.d_bn2 = batch_norm(name='d_bn2')
@@ -69,17 +74,21 @@ class DCGAN(object):
         self.input_fname_pattern = input_fname_pattern
         self.checkpoint_dir = checkpoint_dir
 
-        # if self.dataset_name == 'mnist':
-        #       self.data_X, self.data_y = self.load_mnist()
-        #       self.c_dim = self.data_X[0].shape[-1]
-        # else:
-        #       self.data = glob(os.path.join("./data", self.dataset_name, self.input_fname_pattern))
-        #       imreadImg = imread(self.data[0])
-        #       if len(imreadImg.shape) >= 3: #check if image is a non-grayscale image by checking channel number
-        #           self.c_dim = imread(self.data[0]).shape[-1]
-        #       else:
-        #           self.c_dim = 1
-        self.c_dim = 3
+        if self.dataset_name == 'anime':
+            self.images, self.tags = self.load_anime()
+            self.c_dim = 3
+        """
+        if self.dataset_name == 'mnist':
+            self.data_X, self.data_y = self.load_mnist()
+            self.c_dim = self.data_X[0].shape[-1]
+        else:
+            self.data = glob(os.path.join("./data", self.dataset_name, self.input_fname_pattern))
+            imreadImg = imread(self.data[0])
+            if len(imreadImg.shape) >= 3: #check if image is a non-grayscale image by checking channel number
+                self.c_dim = imread(self.data[0]).shape[-1]
+            else:
+                self.c_dim = 1
+        """
 
         self.grayscale = (self.c_dim == 1)
 
@@ -105,9 +114,9 @@ class DCGAN(object):
             tf.float32, [None, self.z_dim], name='z')
         self.z_sum = histogram_summary("z", self.z)
 
-        self.G                                  = self.generator(self.z, self.y)
-        self.D, self.D_logits       = self.discriminator(inputs, self.y, reuse=False)
-        self.sampler                        = self.sampler(self.z, self.y)
+        self.G                  = self.generator(self.z, self.y)
+        self.D, self.D_logits   = self.discriminator(inputs, self.y, reuse=False)
+        self.sampler            = self.sampler(self.z, self.y)
         self.D_, self.D_logits_ = self.discriminator(self.G, self.y, reuse=True)
         
         self.d_sum = histogram_summary("d", self.D)
@@ -143,10 +152,10 @@ class DCGAN(object):
         self.saver = tf.train.Saver()
 
     def train(self, config):
-        d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-                            .minimize(self.d_loss, var_list=self.d_vars)
-        g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-                            .minimize(self.g_loss, var_list=self.g_vars)
+        # d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+        #                     .minimize(self.d_loss, var_list=self.d_vars)
+        # g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+        #                     .minimize(self.g_loss, var_list=self.g_vars)
         try:
             tf.global_variables_initializer().run()
         except:
@@ -159,7 +168,21 @@ class DCGAN(object):
         self.writer = SummaryWriter("./logs", self.sess.graph)
 
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num , self.z_dim))
+
+        if config.dataset == 'anime':
+            sample_files = self.tags[:self.sample_num]
+            sample = [
+                    get_image(os.path.join(self.data_dir, 'faces', tag[0] + '.jpg'),
+                                input_height=self.input_height,
+                                input_width=self.input_width,
+                                resize_height=self.output_height,
+                                resize_width=self.output_width,
+                                crop=self.crop,
+                                grayscale=self.grayscale) for tag in sample_files]
+
+
         
+        """
         if config.dataset == 'mnist':
             sample_inputs = self.data_X[0:self.sample_num]
             sample_labels = self.data_y[0:self.sample_num]
@@ -177,6 +200,7 @@ class DCGAN(object):
                 sample_inputs = np.array(sample).astype(np.float32)[:, :, :, None]
             else:
                 sample_inputs = np.array(sample).astype(np.float32)
+        """
     
         counter = 1
         start_time = time.time()
@@ -277,6 +301,7 @@ class DCGAN(object):
                     % (epoch, idx, batch_idxs,
                         time.time() - start_time, errD_fake+errD_real, errG))
 
+                """
                 if np.mod(counter, 100) == 1:
                     if config.dataset == 'mnist':
                         samples, d_loss, g_loss = self.sess.run(
@@ -304,6 +329,7 @@ class DCGAN(object):
                             print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
                         except:
                             print("one pic error!...")
+                """
 
                 if np.mod(counter, 500) == 2:
                     self.save(config.checkpoint_dir, counter)
@@ -449,6 +475,68 @@ class DCGAN(object):
                 h2 = conv_cond_concat(h2, yb)
 
                 return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+
+    def load_skip_thought(self):
+        MODEL_PATH="skip_thoughts_uni_2017_02_02/"
+        VOCAB_FILE = MODEL_PATH + "vocab.txt"
+        EMBEDDING_MATRIX_FILE = MODEL_PATH + "embeddings.npy"
+        CHECKPOINT_PATH = MODEL_PATH + "model.ckpt-501424"
+        
+        self.encoder = encoder_manager.EncoderManager()
+        self.encoder.load_model(configuration.model_config(),
+                    vocabulary_file=VOCAB_FILE,
+                    embedding_matrix_file=EMBEDDING_MATRIX_FILE,
+                    checkpoint_path=CHECKPOINT_PATH)
+
+    def del_skip_thought(self):
+        del self.encoder
+
+    def load_anime(self):
+        images = []
+        tags = []
+
+        self.load_skip_thought()
+        print ('loaded skip thought')
+        time.sleep(5)
+
+        f = open(os.path.join(self.data_dir, 'trim.txt'))
+        while (True):
+            line = f.readline()
+            if (len(line) == 0):
+                break
+
+            line = line[:-1]
+
+            splits = line.split(',')
+            if (len(splits[1]) > 0):
+                index = splits[0]
+                tag = splits[1]
+
+                image = get_image(os.path.join(self.data_dir, 'faces', index + '.jpg'),
+                            input_height=self.input_height,
+                            input_width=self.input_width,
+                            resize_height=self.output_height,
+                            resize_width=self.output_width,
+                            crop=self.crop,
+                            grayscale=False)
+                images.append(image)
+
+                # tags.append(self.encoder.encode([tag])[0])
+                tags.append(tag)
+
+        tags = self.encoder.encode(tags)
+        print ('loaded files')
+        time.sleep(5)
+
+        self.del_skip_thought()
+        print ('deleted skip thought')
+        time.sleep(5)
+        images = np.array(images)
+
+        print ('shapes: ', images.shape, tags.shape)
+
+        return images, tags
+
 
     def load_mnist(self):
         data_dir = os.path.join("./data", self.dataset_name)
