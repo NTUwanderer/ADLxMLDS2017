@@ -23,7 +23,7 @@ flags.DEFINE_string("input_fname_pattern", "*.jpg", "Glob pattern of filename of
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
 flags.DEFINE_string("data_dir", "./data", "Directory name to save the image samples [samples]")
-flags.DEFINE_boolean("train", True, "True for training, False for testing [False]")
+flags.DEFINE_boolean("train", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("crop", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("visualize", False, "True for visualizing, False for nothing [False]")
 flags.DEFINE_integer("generate_test_images", 100, "Number of images to generate during test. [100]")
@@ -107,6 +107,8 @@ def main(_):
                 raise Exception("[!] Train a model first, then run test mode")
             
 
+            dcgan.produceImages('early.txt')
+
         # to_json("./web/js/layers.js", [dcgan.h0_w, dcgan.h0_b, dcgan.g_bn0],
         #                                   [dcgan.h1_w, dcgan.h1_b, dcgan.g_bn1],
         #                                   [dcgan.h2_w, dcgan.h2_b, dcgan.g_bn2],
@@ -114,8 +116,8 @@ def main(_):
         #                                   [dcgan.h4_w, dcgan.h4_b, None])
 
         # Below is codes for visualization
-        OPTION = 1
-        visualize(sess, dcgan, FLAGS, OPTION)
+        # OPTION = 1
+        # visualize(sess, dcgan, FLAGS, OPTION)
 
 if __name__ == '__main__':
     tf.app.run()

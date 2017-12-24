@@ -14,6 +14,7 @@ from skip_thoughts import encoder_manager
 
 from ops import *
 from utils import *
+import scipy.misc
 # from Utils import ops
 
 def conv_out_size_same(size, stride):
@@ -62,6 +63,7 @@ class DCGAN(object):
         self.dataset_name = dataset_name
         self.input_fname_pattern = input_fname_pattern
         self.checkpoint_dir = checkpoint_dir
+        self.sample_dir = sample_dir
         self.data_dir = data_dir
 
         # batch normalization : deals with poor initialization helps gradient flow
@@ -83,10 +85,6 @@ class DCGAN(object):
         self.input_fname_pattern = input_fname_pattern
         self.checkpoint_dir = checkpoint_dir
         """
-
-        if self.dataset_name == 'anime':
-            self.images, self.tags = self.load_anime()
-            self.c_dim = 3
         """
         if self.dataset_name == 'mnist':
             self.data_X, self.data_y = self.load_mnist()
@@ -100,6 +98,7 @@ class DCGAN(object):
                 self.c_dim = 1
         """
 
+        self.c_dim = 3
         self.grayscale = (self.c_dim == 1)
 
         self.g_bn0 = batch_norm(name='g_bn0')
@@ -169,6 +168,10 @@ class DCGAN(object):
         self.saver = tf.train.Saver()
 
     def train(self, config):
+
+        if self.dataset_name == 'anime':
+            self.images, self.tags = self.load_anime()
+
         d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
                             .minimize(self.d_loss, var_list=self.d_vars)
         g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
@@ -419,43 +422,6 @@ class DCGAN(object):
         return images, tags
 
 
-    def load_mnist(self):
-        data_dir = os.path.join("./data", self.dataset_name)
-        
-        fd = open(os.path.join(data_dir,'train-images-idx3-ubyte'))
-        loaded = np.fromfile(file=fd,dtype=np.uint8)
-        trX = loaded[16:].reshape((60000,28,28,1)).astype(np.float)
-
-        fd = open(os.path.join(data_dir,'train-labels-idx1-ubyte'))
-        loaded = np.fromfile(file=fd,dtype=np.uint8)
-        trY = loaded[8:].reshape((60000)).astype(np.float)
-
-        fd = open(os.path.join(data_dir,'t10k-images-idx3-ubyte'))
-        loaded = np.fromfile(file=fd,dtype=np.uint8)
-        teX = loaded[16:].reshape((10000,28,28,1)).astype(np.float)
-
-        fd = open(os.path.join(data_dir,'t10k-labels-idx1-ubyte'))
-        loaded = np.fromfile(file=fd,dtype=np.uint8)
-        teY = loaded[8:].reshape((10000)).astype(np.float)
-
-        trY = np.asarray(trY)
-        teY = np.asarray(teY)
-        
-        X = np.concatenate((trX, teX), axis=0)
-        y = np.concatenate((trY, teY), axis=0).astype(np.int)
-        
-        seed = 547
-        np.random.seed(seed)
-        np.random.shuffle(X)
-        np.random.seed(seed)
-        np.random.shuffle(y)
-        
-        y_vec = np.zeros((len(y), self.y_dim), dtype=np.float)
-        for i, label in enumerate(y):
-            y_vec[i,y[i]] = 1.0
-        
-        return X/255.,y_vec
-
     @property
     def model_dir(self):
         return "{}_{}_{}_{}".format(
@@ -488,3 +454,58 @@ class DCGAN(object):
         else:
             print(" [*] Failed to find a checkpoint")
             return False, 0
+
+    def produceImages(self, testing_text_fileName, repeat=5):
+        # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+        # if could_load:
+        #     counter = checkpoint_counter
+        #     print(" [*] Load SUCCESS")
+        # else:
+        #     print(" [!] Load failed...")
+
+        
+        indices = []
+        tags = []
+        f = open(os.path.join(self.data_dir, testing_text_fileName))
+        while (True):
+            line = f.readline()
+            if (len(line) == 0):
+                break
+
+            if line[-1] == '\n':
+                line = line[:-1]
+
+            splits = line.split(',')
+            indices.append(int(splits[0]))
+            tags.append(splits[1])
+
+        self.load_skip_thought()
+        tags = self.encoder.encode(tags)
+        self.del_skip_thought()
+        tags = np.repeat(tags, repeat, axis=0)
+        
+        batch_idxs = (len(tags) + self.batch_size - 1) // self.batch_size
+
+        for idx in range(batch_idxs):
+            start = idx*self.batch_size
+            limit = min(len(tags), (idx+1)*self.batch_size)
+            batch_labels = np.zeros([self.batch_size, self.y_dim])
+            batch_labels[:limit - start] = tags[start : limit]
+            
+
+            sample_z = np.random.uniform(-1, 1, size=(self.sample_num , self.z_dim))
+            samples = self.sess.run(
+                [self.sampler],
+                feed_dict={
+                        self.z: sample_z,
+                        self.y: batch_labels,
+                }
+            )
+            samples = samples[0]
+            for i in range(start, limit):
+                testing_text_id = indices[i // repeat]
+                sample_id = i % repeat + 1
+
+                scipy.misc.imsave('./{}/sample_{}_{}.jpg'.format(self.sample_dir, testing_text_id, sample_id), samples[i - start])
+
+
