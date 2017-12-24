@@ -18,7 +18,7 @@ def conv_out_size_same(size, stride):
 class DCGAN(object):
     def __init__(self, sess, input_height=64, input_width=64, crop=False,
                  batch_size=64, sample_num = 64, output_height=64, output_width=64,
-                 y_dim=2400, z_dim=100, gf_dim=64, df_dim=64,
+                 y_dim=100, z_dim=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='anime',
                  input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None, data_dir=None):
         """
@@ -496,8 +496,6 @@ class DCGAN(object):
         tags = []
 
         self.load_skip_thought()
-        print ('loaded skip thought')
-        time.sleep(5)
 
         f = open(os.path.join(self.data_dir, 'trim.txt'))
         while (True):
@@ -525,15 +523,9 @@ class DCGAN(object):
                 tags.append(tag)
 
         tags = self.encoder.encode(tags)
-        print ('loaded files')
-        time.sleep(5)
 
         self.del_skip_thought()
-        print ('deleted skip thought')
-        time.sleep(5)
         images = np.array(images)
-
-        print ('shapes: ', images.shape, tags.shape)
 
         return images, tags
 

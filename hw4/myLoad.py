@@ -1,9 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
-import os.path
-import scipy.spatial.distance as sd
 from skip_thoughts import configuration
 from skip_thoughts import encoder_manager
 
@@ -20,3 +15,4 @@ encoder.load_model(configuration.model_config(),
 
 result = encoder.encode(['brown eyes', 'white hair'])
 print ('result: ', result)
+print ('result shape: ', result.shape)
