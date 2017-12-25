@@ -115,6 +115,7 @@ class DCGAN(object):
 
     def build_model(self):
         self.y = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
+        self.y2 = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y2')
 
         if self.crop:
             image_dims = [self.output_height, self.output_width, self.c_dim]
@@ -134,6 +135,7 @@ class DCGAN(object):
         self.D, self.D_logits   = self.discriminator(inputs, self.y, reuse=False)
         self.sampler            = self.sampler(self.z, self.y)
         self.D_, self.D_logits_ = self.discriminator(self.G, self.y, reuse=True)
+        self.D2_, self.D_logits2_ = self.discriminator(inputs, self.y2, reuse=True)
         
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
@@ -149,13 +151,15 @@ class DCGAN(object):
             sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
         self.d_loss_fake = tf.reduce_mean(
             sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
+        self.d_loss_wrong = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.D_logits2_, tf.zeros_like(self.D2_)))
         self.g_loss = tf.reduce_mean(
             sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))
 
         self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
         self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
                                                     
-        self.d_loss = self.d_loss_real + self.d_loss_fake
+        self.d_loss = self.d_loss_real + self.d_loss_fake + self.d_loss_wrong
 
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
@@ -228,12 +232,41 @@ class DCGAN(object):
 
             random_order = np.arange(len(self.images))
             np.random.shuffle(random_order)
+
+            random_order2 = np.arange(len(self.images))
+            while True:
+                print ('Shuffling')
+                allDiff = True
+                for i in range(len(random_order2)):
+                    i1 = random_order[i]
+                    i2 = random_order2[i]
+                    if self.orig_tags[i1] == self.orig_tags[i2]:
+                        allDiff = False
+                        for j in range (i+1, len(random_order2)):
+                            if self.orig_tags[i1] != self.orig_tags[random_order2[j]]:
+                                allDiff = True
+                                random_order2[[i, j]] = random_order2[[j, i]]
+                                break
+
+                        if allDiff == False:
+                            break
+                        else:
+                            i2 = random_order2[i]
+                            if self.orig_tags[i1] == self.orig_tags[i2]:
+                                print ('Wrong Swap')
+                                allDiff = False
+                                break
+
+                if allDiff:
+                    break
             
             for idx in range(0, batch_idxs):
                 if config.dataset == 'anime':
                     indices = random_order[idx*config.batch_size:(idx+1)*config.batch_size]
+                    indices2 = random_order2[idx*config.batch_size:(idx+1)*config.batch_size]
                     batch_images = self.images[indices]
                     batch_labels = self.tags[indices]
+                    batch_labels2 = self.tags[indices2]
                     
                 batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
                             .astype(np.float32)
@@ -244,7 +277,8 @@ class DCGAN(object):
                         feed_dict={ 
                             self.inputs: batch_images,
                             self.z: batch_z,
-                            self.y:batch_labels,
+                            self.y: batch_labels,
+                            self.y2: batch_labels2,
                         })
                     self.writer.add_summary(summary_str, counter)
 
@@ -281,17 +315,18 @@ class DCGAN(object):
 
                 if np.mod(counter, 100) == 1:
                     if config.dataset == 'anime':
-                        samples, d_loss, g_loss = self.sess.run(
-                            [self.sampler, self.d_loss, self.g_loss],
+                        samples = self.sess.run(
+                            [self.sampler],
                             feed_dict={
                                     self.z: sample_z,
                                     self.inputs: sample_inputs,
                                     self.y:sample_labels,
                             }
                         )
+                        samples = samples[0]
                         save_images(samples, image_manifold_size(samples.shape[0]),
                                     './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
-                        print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
+                        # print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
 
                 if np.mod(counter, 500) == 2:
                     self.save(config.checkpoint_dir, counter)
@@ -392,7 +427,7 @@ class DCGAN(object):
 
         self.load_skip_thought()
 
-        f = open(os.path.join(self.data_dir, 'trim.txt'))
+        f = open(os.path.join(self.data_dir, 'trim2.txt'))
         while (True):
             line = f.readline()
             if (len(line) == 0):
@@ -411,6 +446,8 @@ class DCGAN(object):
 
                 # tags.append(self.encoder.encode([tag])[0])
                 tags.append(tag)
+
+        self.orig_tags = tags
 
         tags = self.encoder.encode(tags)
 
