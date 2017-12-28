@@ -23,7 +23,7 @@ def conv_out_size_same(size, stride):
 class DCGAN(object):
     def __init__(self, sess, input_height=64, input_width=64, crop=False,
                  batch_size=64, sample_num = 64, output_height=64, output_width=64,
-                 y_dim=2400, ry_dim=128, z_dim=100, gf_dim=64, df_dim=64,
+                 y_dim=2400, ry_dim=256, z_dim=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='anime',
                  input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None, data_dir=None):
         """
@@ -65,6 +65,9 @@ class DCGAN(object):
         self.checkpoint_dir = checkpoint_dir
         self.sample_dir = sample_dir
         self.data_dir = data_dir
+
+        self.g_update = 2
+        self.d_update = 1
 
         # batch normalization : deals with poor initialization helps gradient flow
         """
@@ -115,7 +118,6 @@ class DCGAN(object):
 
     def build_model(self):
         self.y = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
-        self.y2 = tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y2')
 
         if self.crop:
             image_dims = [self.output_height, self.output_width, self.c_dim]
@@ -124,6 +126,9 @@ class DCGAN(object):
 
         self.inputs = tf.placeholder(
             tf.float32, [self.batch_size] + image_dims, name='real_images')
+
+        self.fake_inputs = tf.placeholder(
+            tf.float32, [self.batch_size] + image_dims, name='wrong_images')
 
         inputs = self.inputs
 
@@ -135,7 +140,7 @@ class DCGAN(object):
         self.D, self.D_logits   = self.discriminator(inputs, self.y, reuse=False)
         self.sampler            = self.sampler(self.z, self.y)
         self.D_, self.D_logits_ = self.discriminator(self.G, self.y, reuse=True)
-        self.D2_, self.D_logits2_ = self.discriminator(inputs, self.y2, reuse=True)
+        self.D2_, self.D_logits2_ = self.discriminator(self.fake_inputs, self.y, reuse=True)
         
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
@@ -176,10 +181,12 @@ class DCGAN(object):
         if self.dataset_name == 'anime':
             self.images, self.tags = self.load_anime()
 
-        d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-                            .minimize(self.d_loss, var_list=self.d_vars)
-        g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-                            .minimize(self.g_loss, var_list=self.g_vars)
+        # d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+        #                     .minimize(self.d_loss, var_list=self.d_vars)
+        # g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+        #                     .minimize(self.g_loss, var_list=self.g_vars)
+        d_optim = tf.train.AdamOptimizer(config.learning_rate).minimize(self.d_loss, var_list=self.d_vars)
+        g_optim = tf.train.AdamOptimizer(config.learning_rate).minimize(self.g_loss, var_list=self.g_vars)
         try:
             tf.global_variables_initializer().run()
         except:
@@ -219,14 +226,13 @@ class DCGAN(object):
     
         counter = 1
         start_time = time.time()
-        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+        could_load, checkpoint_epoch = self.load(self.checkpoint_dir)
         if could_load:
-            counter = checkpoint_counter
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
 
-        for epoch in range(config.epoch):
+        for epoch in range(checkpoint_epoch, config.epoch + checkpoint_epoch):
             if config.dataset == 'anime':
                 batch_idxs = min(len(self.images), config.train_size) // config.batch_size
 
@@ -234,8 +240,13 @@ class DCGAN(object):
             np.random.shuffle(random_order)
 
             random_order2 = np.arange(len(self.images))
+            for i in range(len(self.images)):
+                while self.orig_tags[random_order[i]] == self.orig_tags[random_order2[i]]:
+                    random_order2[i] = random.randint(0, len(self.images)-1)
+            """
             while True:
                 print ('Shuffling')
+                np.random.shuffle(random_order2)
                 allDiff = True
                 for i in range(len(random_order2)):
                     i1 = random_order[i]
@@ -259,6 +270,14 @@ class DCGAN(object):
 
                 if allDiff:
                     break
+            """
+
+            for i in range(len(random_order)):
+                if self.orig_tags[random_order[i]] == self.orig_tags[random_order2[i]]:
+                    errorF = open('error.log', 'a')
+                    errorF.write('Error: ' + str(i) + ', ' + self.orig_tags[random_order[i]])
+                    errorF.close()
+                    break
             
             for idx in range(0, batch_idxs):
                 if config.dataset == 'anime':
@@ -266,33 +285,35 @@ class DCGAN(object):
                     indices2 = random_order2[idx*config.batch_size:(idx+1)*config.batch_size]
                     batch_images = self.images[indices]
                     batch_labels = self.tags[indices]
-                    batch_labels2 = self.tags[indices2]
+                    batch_images2 = self.images[indices2]
                     
                 batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
                             .astype(np.float32)
 
                 if config.dataset == 'anime':
                     # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                        feed_dict={ 
-                            self.inputs: batch_images,
-                            self.z: batch_z,
-                            self.y: batch_labels,
-                            self.y2: batch_labels2,
-                        })
-                    self.writer.add_summary(summary_str, counter)
+                    for times in range(self.d_update):
+                        _, summary_str = self.sess.run([d_optim, self.d_sum],
+                            feed_dict={ 
+                                self.inputs: batch_images,
+                                self.z: batch_z,
+                                self.y: batch_labels,
+                                self.fake_inputs: batch_images2,
+                            })
+                        self.writer.add_summary(summary_str, counter)
 
                     # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                        feed_dict={
-                            self.z: batch_z, 
-                            self.y:batch_labels,
-                        })
-                    self.writer.add_summary(summary_str, counter)
+                    for times in range(self.g_update):
+                        _, summary_str = self.sess.run([g_optim, self.g_sum],
+                            feed_dict={
+                                self.z: batch_z, 
+                                self.y:batch_labels,
+                            })
+                        self.writer.add_summary(summary_str, counter)
 
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                        feed_dict={ self.z: batch_z, self.y:batch_labels })
+                    # _, summary_str = self.sess.run([g_optim, self.g_sum],
+                    #     feed_dict={ self.z: batch_z, self.y:batch_labels })
                     self.writer.add_summary(summary_str, counter)
                     
                     errD_fake = self.d_loss_fake.eval({
@@ -328,10 +349,12 @@ class DCGAN(object):
                                     './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
                         # print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
 
-                if np.mod(counter, 500) == 2:
-                    self.save(config.checkpoint_dir, counter)
+                # if np.mod(counter, 500) == 2:
+                #     self.save(config.checkpoint_dir, counter)
+                if epoch % 20 == 0:
+                    self.save(config.checkpoint_dir, epoch)
 
-    def discriminator(self, image, y=None, reuse=False):
+    def discriminator(self, image, y, reuse=False):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -427,7 +450,7 @@ class DCGAN(object):
 
         self.load_skip_thought()
 
-        f = open(os.path.join(self.data_dir, 'trim2.txt'))
+        f = open(os.path.join(self.data_dir, 'trim.txt'))
         while (True):
             line = f.readline()
             if (len(line) == 0):
@@ -485,9 +508,9 @@ class DCGAN(object):
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
             self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
-            counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+            epoch = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
-            return True, counter
+            return True, epoch
         else:
             print(" [*] Failed to find a checkpoint")
             return False, 0

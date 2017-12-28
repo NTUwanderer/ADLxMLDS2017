@@ -6,10 +6,11 @@ from model import DCGAN
 from utils import pp, visualize, to_json, show_all_variables
 
 import tensorflow as tf
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 
 flags = tf.app.flags
-flags.DEFINE_integer("epoch", 300, "Epoch to train [25]")
-flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
+flags.DEFINE_integer("epoch", 1000, "Epoch to train [25]")
+flags.DEFINE_float("learning_rate", 0.0001, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 flags.DEFINE_integer("train_size", np.inf, "The size of train images [np.inf]")
 flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
@@ -26,6 +27,7 @@ flags.DEFINE_string("data_dir", "./data", "Directory name to save the image samp
 flags.DEFINE_boolean("train", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("crop", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("visualize", False, "True for visualizing, False for nothing [False]")
+flags.DEFINE_integer("z_dim", 100, "Number of images to generate during test. [100]")
 flags.DEFINE_integer("generate_test_images", 100, "Number of images to generate during test. [100]")
 FLAGS = flags.FLAGS
 
@@ -45,6 +47,7 @@ def main(_):
     #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
     run_config = tf.ConfigProto()
     run_config.gpu_options.allow_growth=True
+    # run_config.intra_op_parallelism_threads=16
 
     with tf.Session(config=run_config) as sess:
         if FLAGS.dataset == 'anime':
@@ -57,7 +60,7 @@ def main(_):
                     batch_size=FLAGS.batch_size,
                     sample_num=FLAGS.batch_size,
                     y_dim=2400,
-                    z_dim=FLAGS.generate_test_images,
+                    z_dim=FLAGS.z_dim,
                     dataset_name=FLAGS.dataset,
                     input_fname_pattern=FLAGS.input_fname_pattern,
                     crop=FLAGS.crop,
