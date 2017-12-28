@@ -27,11 +27,12 @@ else:
         return tf.concat(tensors, axis, *args, **kwargs)
 
 class batch_norm(object):
-    def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
+    def __init__(self, params, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
         with tf.variable_scope(name):
             self.epsilon    = epsilon
             self.momentum = momentum
             self.name = name
+            self.train = params['istrain']
 
     def __call__(self, x, train=True):
         return tf.contrib.layers.batch_norm(x,
@@ -39,7 +40,18 @@ class batch_norm(object):
                                             updates_collections=None,
                                             epsilon=self.epsilon,
                                             scale=True,
-                                            is_training=train,
+                                            is_training=self.train,
+                                            scope=self.name)
+
+class layer_norm(object):
+    def __init__(self, params, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
+        with tf.variable_scope(name):
+            self.name = name
+    
+    def __call__(self, x, train=True):
+        return tf.contrib.layers.layer_norm(x,
+                                            scale=True,
+                                            trainable=train,
                                             scope=self.name)
 
 def conv_cond_concat(x, y):
