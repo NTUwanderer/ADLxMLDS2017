@@ -1,16 +1,18 @@
 import tensorflow as tf
 import os
+os.environ['CUDA_VISIBLE_DEVICES']='1'
+
 import DCGAN
 import skimage.io
 import skimage.transform
-import os
 import numpy as np
 import scipy.spatial.distance as sd
 import pdb
 import random
 import pickle
 
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+from skip_thoughts import configuration
+from skip_thoughts import encoder_manager
 
 MODEL_PATH="./skip_thoughts/unidirectional/"
 VOCAB_FILE = MODEL_PATH + "vocab.txt"
@@ -43,11 +45,17 @@ def get_training_batch(batch_no, batch_size, image_size, z_dim,
         captions[cnt] = embeddings[idx]
 
         # Improve this selection of wrong image
-        wrong_image_id = random.randint(0, len(images)-1)
-        wrong_images[cnt] = images[wrong_image_id]
+        while True:
+            wrong_image_id = random.randint(0, len(images)-1)
+            if tags[idx] != tags[wrong_image_id]:
+                wrong_images[cnt] = images[wrong_image_id]
+                break
 
-        wrong_caption_id = random.randint(0, len(images)-1)
-        wrong_captions[cnt] = embeddings[wrong_caption_id]
+        while True:
+            wrong_caption_id = random.randint(0, len(images)-1)
+            if tags[idx] != tags[wrong_caption_id]:
+                wrong_captions[cnt] = embeddings[wrong_caption_id]
+                break
 
         #image_files.append(image_file)
         cnt += 1
@@ -61,14 +69,14 @@ def read_images(image_dir , trim_tags , batch_size):
     
     images = []
     tmp_tags = []
-    """
+
     encoder = encoder_manager.EncoderManager()
     encoder.load_model(configuration.model_config(),
                     vocabulary_file=VOCAB_FILE,
                     embedding_matrix_file=EMBEDDING_MATRIX_FILE,
                     checkpoint_path=CHECKPOINT_PATH)
-    """
     f = open(trim_tags , 'r')
+
     for line in f.readlines():
         id = line.split(',')[0]
         #print(id)
@@ -79,9 +87,12 @@ def read_images(image_dir , trim_tags , batch_size):
         img_resized = skimage.transform.resize(img, (64,64),mode='constant')
         images.append(img_resized)
 
-    captions = pickle.load(open('cap_b.pkl' , 'rb'))
+    # captions = pickle.load(open('cap_b.pkl' , 'rb'))
+    captions = encoder.encode(tmp_tags)    
+    del encoder
     rest = len(images) % batch_size
     
+    tags = tmp_tags
     tmp_images = images
     tmp_cap = captions.tolist()
     
@@ -89,16 +100,17 @@ def read_images(image_dir , trim_tags , batch_size):
         for i in range(batch_size-rest):            
             tmp_images.append(images[i])
             tmp_cap.append(captions[i])
-    #encodings = encoder.encode(tmp_tags)    
+            tmp_tags.append(tags[i])
 
-    return tmp_images, tmp_cap
+    print ('len: ', len(tmp_images), len(tmp_cap), len(tmp_tags))
+    return tmp_images, tmp_cap, tmp_tags
     
 
 num_epochs = 800
 learning_rate = 0.0001
 resume_model = False
 image_dir = 'data/faces/'
-trim_tags = 'trim.txt'
+trim_tags = 'trim2.txt'
 dis_updates = 1
 gen_updates = 2
 model_path = 'dcgan-model/'
@@ -120,7 +132,7 @@ params = dict(
 gan = DCGAN.GAN(params)
 input_tensors, variables, outputs, loss = gan.build_model()
 
-images, captions = read_images(image_dir , trim_tags , params['batch_size'])
+images, captions, tags = read_images(image_dir , trim_tags , params['batch_size'])
 #pickle.dump(captions , open('cap_b.pkl' , 'wb'))
 
 #captions = pickle.load(open('cap_b.pkl' , 'rb'))
