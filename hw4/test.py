@@ -1,6 +1,6 @@
 import tensorflow as tf
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+os.environ['CUDA_VISIBLE_DEVICES']=''
 import DCGAN
 import skimage.io
 import skimage.transform
@@ -12,6 +12,16 @@ import scipy.spatial.distance as sd
 import pdb
 import random
 
+import argparse
+
+np.random.seed(1)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--model', type=str, help='Model name')
+parser.add_argument('-r', '--resume', type=str, choices = ['True', 'False'], help='Resume or not')
+parser.add_argument('-p', '--path', type=str, help='Model path')
+args = parser.parse_args()
+
 MODEL_PATH="./skip_thoughts/unidirectional/"
 VOCAB_FILE = MODEL_PATH + "vocab.txt"
 EMBEDDING_MATRIX_FILE = MODEL_PATH + "embeddings.npy"
@@ -20,16 +30,17 @@ CHECKPOINT_PATH = MODEL_PATH + "model.ckpt-501424"
 
 num_epochs = 500
 learning_rate = 0.0001
-resume_model = False
+resume_model = (args.resume == 'True')
 image_dir = 'data/faces/'
 trim_tags = 'trim.txt'
 dis_updates = 1
 gen_updates = 2
 num_images = 5
-model_path = 'dcgan-model'
+#model_path = 'dcgan-model'
+model_path = args.path
 pic_save_path = 'samples/'
 early_text = 'green hair blue eyes'
-test_txt = 'data/sample_testing_text.txt'
+test_txt = 'data/testing_text.txt'
 
 params = dict(
     z_dim = 250,
@@ -60,57 +71,50 @@ encoder.load_model(configuration.model_config(),
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
 ckpt = tf.train.get_checkpoint_state(model_path)
-print ('path: ', ckpt.model_checkpoint_path)
-saver.restore(sess , ckpt.model_checkpoint_path)
-input_tensors, outputs = gan.build_generator()
+#print ('path: ', ckpt.model_checkpoint_path)
+#saver.restore(sess , ckpt.model_checkpoint_path)
 
+model_names = ['model-640', 'model-680', 'model-720', 'model-760', 'model-800']
 
-ids = []
-tags = []
+for i_th, name in enumerate(model_names):
 
-f = open(test_txt , 'r')
-for line in f.readlines():
-    id = line.split(',')[0]        
-    tag = line.split(',')[1]
-    ids.append(id)
-    tags.append(tag)
-
-z_noise = np.random.uniform(-1, 1, [len(ids), num_images, params['z_dim']])
-encodings = encoder.encode(tags)
-encodings = np.array(encodings)
-print(np.shape(encodings))
-encodings = np.expand_dims(encodings , axis=1)
-print(np.shape(encodings))
-caption = np.tile(encodings, (1,num_images,1))
-print(np.shape(caption))
-
-
-
-#caption = np.reshape(caption , (-1, num_images , params['caption_length']))
-
-caption_images = {}
-for i in range(0,len(ids)):
-    caption_images[ids[i]] =\
-    sess.run([outputs['generator']],
-            feed_dict = {input_tensors['t_real_caption'] : caption[i],
-                        input_tensors['t_z'] : z_noise[i]}) # (1,num_images,64,64,3)
-
-#pdb.set_trace()
-
-for i in range(len(ids)):
-    for j in range(num_images):
-        skimage.io.imsave(os.path.join(pic_save_path , str(i)+ '_' + str(j) + '_490' + '.jpg') , caption_images[ids[i]][0][j])
-"""
-encodings = encoder.encode([early_text])
-z_noise = np.random.uniform(-1, 1, [1, params['z_dim']])
-caption = np.tile(np.array(encodings) , (1 , 1))
-
-[gen_image] =\
-    sess.run([outputs['generator']],
-            feed_dict = {input_tensors['t_real_caption'] : caption,
-                        input_tensors['t_z'] : z_noise})
-
-for i in range(1):
-    skimage.io.imsave(os.path.join(pic_save_path , str(i)+ 'green_800' + '.jpg') , gen_image[i])
-
-"""
+    model_name = model_path + '/' + name
+    print ('model_name: ', model_name)
+    saver.restore(sess , model_name)
+    input_tensors, outputs = gan.build_generator()
+    
+    
+    ids = []
+    tags = []
+    
+    f = open(test_txt , 'r')
+    for line in f.readlines():
+        id = line.split(',')[0]        
+        tag = line.split(',')[1]
+        ids.append(id)
+        tags.append(tag)
+    
+    z_noise = np.random.uniform(-1, 1, [len(ids), num_images, params['z_dim']])
+    encodings = encoder.encode(tags)
+    encodings = np.array(encodings)
+    print(np.shape(encodings))
+    encodings = np.expand_dims(encodings , axis=1)
+    print(np.shape(encodings))
+    caption = np.tile(encodings, (1,num_images,1))
+    print(np.shape(caption))
+    
+    
+    
+    #caption = np.reshape(caption , (-1, num_images , params['caption_length']))
+    
+    caption_images = {}
+    for i in range(0,len(ids)):
+        caption_images[ids[i]] =\
+        sess.run([outputs['generator']],
+                feed_dict = {input_tensors['t_real_caption'] : caption[i],
+                            input_tensors['t_z'] : z_noise[i]}) # (1,num_images,64,64,3)
+    
+    #pdb.set_trace()
+    
+    for i in range(len(ids)):
+        skimage.io.imsave(os.path.join(pic_save_path , ids[i]+ '_' + str(i_th+1) + '.jpg') , caption_images[ids[i]][0][i_th])
