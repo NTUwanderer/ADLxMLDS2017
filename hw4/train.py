@@ -1,6 +1,6 @@
 import tensorflow as tf
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+# os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 import DCGAN
 import skimage.io
@@ -60,7 +60,7 @@ def get_training_batch(batch_no, batch_size, image_size, z_dim,
         #image_files.append(image_file)
         cnt += 1
 
-    z_noise = np.random.uniform(-1, 1, [batch_size, z_dim])
+    z_noise = np.random.uniform(-1.5, 1.5, [batch_size, z_dim])
     return real_images, wrong_images, captions, z_noise, wrong_captions
 
 
@@ -78,9 +78,13 @@ def read_images(image_dir , trim_tags , batch_size):
     f = open(trim_tags , 'r')
 
     for line in f.readlines():
-        id = line.split(',')[0]
-        #print(id)
-        tags = line.split(',')[1]
+        splits = line.split(',')
+        id = splits[0]
+        if len(splits) <= 1 or len(splits[1]) <= 1:
+            continue
+
+        tags = splits[1]
+
         tmp_tags.append(tags)
 
         img = skimage.io.imread(os.path.join(image_dir , id + '.jpg'))
@@ -106,11 +110,12 @@ def read_images(image_dir , trim_tags , batch_size):
     return tmp_images, tmp_cap, tmp_tags
     
 
-num_epochs = 800
+num_epochs = 2400
 learning_rate = 0.0001
-resume_model = False
+resume_model = True
+start_epoch = 0
 image_dir = 'data/faces/'
-trim_tags = 'trim2.txt'
+trim_tags = 'data/tags.txt'
 dis_updates = 1
 gen_updates = 2
 model_path = 'dcgan-model/'
@@ -128,6 +133,13 @@ params = dict(
     caption_length = 2400
 )
 
+# config = tf.ConfigProto(intra_op_parallelism_threads=8,
+#                         inter_op_parallelism_threads=8)
+#run_config = tf.ConfigProto()
+#run_config.gpu_options.allow_growth = True
+
+sess = tf.InteractiveSession()
+sess.run(tf.global_variables_initializer())
 
 gan = DCGAN.GAN(params)
 input_tensors, variables, outputs, loss = gan.build_model()
@@ -146,15 +158,16 @@ images, captions, tags = read_images(image_dir , trim_tags , params['batch_size'
 d_optim = tf.train.RMSPropOptimizer(learning_rate).minimize(loss['d_loss'], var_list=variables['d_vars'])
 g_optim = tf.train.RMSPropOptimizer(learning_rate).minimize(loss['g_loss'], var_list=variables['g_vars'])
 
-
-sess = tf.InteractiveSession()
-sess.run(tf.global_variables_initializer())
-saver = tf.train.Saver()
+saver = tf.train.Saver(max_to_keep=100)
 
 if resume_model:
-    saver.restore(sess, resume_model)
+    ckpt = tf.train.get_checkpoint_state(model_path)
+    if ckpt != None:
+        print ('path: ', ckpt.model_checkpoint_path)
+        saver.restore(sess , ckpt.model_checkpoint_path)
+        start_epoch = int(ckpt.model_checkpoint_path.split('-')[2])
 
-for i in range(0, num_epochs+1):
+for i in range(start_epoch, start_epoch + num_epochs+1):
     batch_no = 0
     while batch_no*params['batch_size'] < len(images):
         real_images, wrong_images, caption_vectors, z_noise, wrong_captions =\
@@ -193,7 +206,7 @@ for i in range(0, num_epochs+1):
         print('-'*60)
         batch_no += 1
         
-    if i%40 == 0:
+    if i%10 == 0:
         saver.save(sess, model_path, global_step=i)      
 
 #images , captions = read_images(image_dir , trim_tags)

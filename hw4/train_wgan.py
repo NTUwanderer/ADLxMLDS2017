@@ -78,9 +78,13 @@ def read_images(image_dir , trim_tags , batch_size):
     f = open(trim_tags , 'r')
 
     for line in f.readlines():
-        id = line.split(',')[0]
-        #print(id)
-        tags = line.split(',')[1]
+        splits = line.split(',')
+        id = splits[0]
+        if len(splits) <= 1 or len(splits[1]) <= 1:
+            continue
+
+        tags = splits[1]
+        
         tmp_tags.append(tags)
 
         img = skimage.io.imread(os.path.join(image_dir , id + '.jpg'))
@@ -106,11 +110,12 @@ def read_images(image_dir , trim_tags , batch_size):
     return tmp_images, tmp_cap, tmp_tags
     
 
-num_epochs = 800
+num_epochs = 1600
 learning_rate = 0.0001
-resume_model = False
+resume_model = True
+start_epoch = 0
 image_dir = 'data/faces/'
-trim_tags = 'trim2.txt'
+trim_tags = 'data/tags.txt'
 dis_updates = 1
 gen_updates = 2
 model_path = 'wgan-model/'
@@ -152,9 +157,13 @@ sess.run(tf.global_variables_initializer())
 saver = tf.train.Saver()
 
 if resume_model:
-    saver.restore(sess, resume_model)
+    ckpt = tf.train.get_checkpoint_state(model_path)
+    if ckpt != None:
+        print ('path: ', ckpt.model_checkpoint_path)
+        saver.restore(sess , ckpt.model_checkpoint_path)
+        start_epoch = int(ckpt.model_checkpoint_path.split('-')[2])
 
-for i in range(0, num_epochs+1):
+for i in range(start_epoch, start_epoch + num_epochs+1):
     batch_no = 0
     while batch_no*params['batch_size'] < len(images):
         real_images, wrong_images, caption_vectors, z_noise, wrong_captions =\
