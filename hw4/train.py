@@ -112,7 +112,7 @@ def read_images(image_dir , trim_tags , batch_size):
 
 num_epochs = 2400
 learning_rate = 0.0001
-resume_model = True
+resume_model = False
 start_epoch = 0
 image_dir = 'data/faces/'
 trim_tags = 'data/tags.txt'
@@ -139,7 +139,6 @@ params = dict(
 #run_config.gpu_options.allow_growth = True
 
 sess = tf.InteractiveSession()
-sess.run(tf.global_variables_initializer())
 
 gan = DCGAN.GAN(params)
 input_tensors, variables, outputs, loss = gan.build_model()
@@ -157,6 +156,8 @@ images, captions, tags = read_images(image_dir , trim_tags , params['batch_size'
 
 d_optim = tf.train.RMSPropOptimizer(learning_rate).minimize(loss['d_loss'], var_list=variables['d_vars'])
 g_optim = tf.train.RMSPropOptimizer(learning_rate).minimize(loss['g_loss'], var_list=variables['g_vars'])
+
+sess.run(tf.global_variables_initializer())
 
 saver = tf.train.Saver(max_to_keep=100)
 
@@ -207,7 +208,7 @@ for i in range(start_epoch, start_epoch + num_epochs+1):
         batch_no += 1
         
     if i%10 == 0:
-        saver.save(sess, model_path, global_step=i)      
+        saver.save(sess, model_path + 'model', global_step=i)      
 
 #images , captions = read_images(image_dir , trim_tags)
 
