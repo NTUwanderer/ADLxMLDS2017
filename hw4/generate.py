@@ -18,6 +18,7 @@ import argparse
 np.random.seed(1)
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-t', '--testing_text', type=str, default='data/testing_text.txt', help='path to testing_text.txt')
 parser.add_argument('-m', '--model', type=str, help='Model name')
 parser.add_argument('-p', '--path', type=str, default='dcgan-model-final', help='Model path')
 parser.add_argument('-o', '--output', type=str, default='samples', help='samples path')
@@ -41,7 +42,8 @@ model_path = args.path
 #pic_save_path = 'samples/'
 pic_save_path = args.output + '/'
 early_text = 'green hair blue eyes'
-test_txt = 'data/testing_text.txt'
+#test_txt = 'data/testing_text.txt'
+test_txt = args.testing_text
 
 params = dict(
     z_dim = 250,
@@ -59,15 +61,6 @@ params = dict(
 
 gan = DCGAN.GAN(params)
 _, _, _, _ = gan.build_model()
-
-encoder = encoder_manager.EncoderManager()
-encoder.load_model(configuration.model_config(),
-                   vocabulary_file=VOCAB_FILE,
-                   embedding_matrix_file=EMBEDDING_MATRIX_FILE,
-                   checkpoint_path=CHECKPOINT_PATH)
-
-
-
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()

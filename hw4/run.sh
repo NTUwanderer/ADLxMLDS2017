@@ -6,4 +6,4 @@ unzip dcgan-model-final.zip
 rm dcgan-model-final.zip
 
 echo 'start generating'
-python3 generate.py
+python3 generate.py -t $1
